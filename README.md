@@ -354,6 +354,60 @@ The proxy log lives at `$PREFIX/tmp/dnsproxy.log`.
 
 ---
 
+## ⚙️ **Configuration (`~/.claude/settings.json`)**
+
+Claude Code reads its environment from `~/.claude/settings.json`.
+The wrapper also reads `ANTHROPIC_*` from this file automatically, so
+set it once and `claude` will just work — no need to export anything.
+
+### Example config (based on a real working setup)
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://your-endpoint.example.com",
+    "ANTHROPIC_API_KEY": "sk-your-api-key-here",
+    "ANTHROPIC_MODEL": "oc/deepseek-v4-flash-free",
+    "ANTHROPIC_SMALL_FAST_MODEL": "oc/deepseek-v4-flash-free",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "NODE_TLS_REJECT_UNAUTHORIZED": "0"
+  },
+  "permissions": {
+    "allow": ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
+    "deny": []
+  },
+  "model": "oc/deepseek-v4-flash-free",
+  "modelOverrides": {
+    "oc/deepseek-v4-flash-free": {
+      "display_name": "DeepSeek V4 Flash Free",
+      "context_window": 200000,
+      "max_output_tokens": 8192
+    }
+  }
+}
+```
+
+### Field breakdown
+
+| Field | Purpose | Notes |
+|---|---|---|
+| `env.ANTHROPIC_BASE_URL` | Your API endpoint | Any Anthropic-compatible gateway/proxy |
+| `env.ANTHROPIC_API_KEY` | API key for that endpoint | Keep it private — never commit this file |
+| `env.ANTHROPIC_MODEL` | Main model | Used for normal chat & coding |
+| `env.ANTHROPIC_SMALL_FAST_MODEL` | Background/summary model | Used for auto-compact, ``/compact``, background tasks. **Must also exist on your endpoint** — an invalid one causes "model not found" errors |
+| `env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | `"1"` disables telemetry/ping | Saves battery & data on mobile |
+| `env.NODE_TLS_REJECT_UNAUTHORIZED` | `"0"` skips TLS cert verification | Needed when the endpoint/gateway uses a non-standard cert |
+| `permissions.allow` / `deny` | Which tools Claude may use | `Bash` is required for the Bash tool |
+| `model` | Default model shown in the UI | Same as `env.ANTHROPIC_MODEL` |
+| `modelOverrides` | Tells Claude Code the model's context window | **Silences the "model not recognized" warning** and keeps auto-compact at the real window |
+
+> 💡 If you use a different model, set both `ANTHROPIC_MODEL` and
+> `ANTHROPIC_SMALL_FAST_MODEL` to model IDs that **actually exist** on your
+> endpoint, and add the model to `modelOverrides` so Claude Code recognizes
+> its context window.
+
+---
+
 ## 🔄 **Updating**
 
 ```bash
