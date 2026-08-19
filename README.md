@@ -157,14 +157,41 @@ patchelf --set-interpreter "$PREFIX/lib/ld-musl-aarch64.so.1" "$BINARY"
 patchelf --set-rpath "$PREFIX/lib" "$BINARY"
 ```
 
-### Step 6 — Fix LD_PRELOAD (bionic compat)
+### Step 6 — Fix LD_PRELOAD + DNS (bionic compat)
+
+First, create a proot rootfs with a working `/etc/resolv.conf`:
 
 ```bash
-cat > "$PREFIX/bin/claude" << 'EOF'
+mkdir -p ~/.claude-termux-root/etc
+cat > ~/.claude-termux-root/etc/resolv.conf << 'EOF'
+nameserver 8.8.8.8
+nameserver 1.1.1.1
+EOF
+```
+
+Then create the wrapper:
+
+```bash
+cat > "$PREFIX/bin/claude" << 'WRAPPER'
 #!/bin/sh
 unset LD_PRELOAD
-exec "$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe" "$@"
-EOF
+
+# Read API settings from settings.json if not in env
+if [ -z "$ANTHROPIC_API_KEY" ] && [ -f "$HOME/.claude/settings.json" ]; then
+  _key=$(grep -o '"ANTHROPIC_API_KEY"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
+  [ -n "$_key" ] && export ANTHROPIC_API_KEY="$_key"
+fi
+export NODE_TLS_REJECT_UNAUTHORIZED="0"
+
+PROOT_ROOT="$HOME/.claude-termux-root"
+BINARY="$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+
+if [ ! -d "$PROOT_ROOT/etc" ]; then
+  exec "$BINARY" "$@"
+fi
+
+exec proot -0 root -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b "$PREFIX/lib" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
+WRAPPER
 chmod +x "$PREFIX/bin/claude"
 ```
 
@@ -340,6 +367,14 @@ Or edit the wrapper at `$PREFIX/bin/claude` to add:
 export ANTHROPIC_BASE_URL="https://RESOLVED_IP"
 export NODE_TLS_REJECT_UNAUTHORIZED="0"
 ```
+
+Or simply re-run the installer — it sets up proot with a fake `/etc/resolv.conf` that musl can read:
+
+```bash
+bash install.sh
+```
+
+The wrapper uses proot to intercept filesystem calls, providing musl with a working DNS config at `/etc/resolv.conf` (8.8.8.8, 1.1.1.1).
 
 </details>
 
