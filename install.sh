@@ -385,7 +385,8 @@ RESOLV
     fi
 
     # Create wrapper script (this is what `claude` actually runs)
-    cat > "$USR_BIN/claude" << WRAPPER
+    # Use a quoted heredoc to avoid escaping issues, then sed-replace placeholders
+    cat > "$USR_BIN/claude" << 'WRAPPER'
 #!/bin/sh
 # Claude Code wrapper for Android Termux
 # Fixes: DNS resolution (musl reads /etc/resolv.conf which doesn't exist on Android)
@@ -394,53 +395,59 @@ RESOLV
 unset LD_PRELOAD
 
 # Ensure ANTHROPIC env vars are set from settings.json if not in environment
-if [ -z "\\\$ANTHROPIC_API_KEY" ]; then
-  if [ -f "\\\$HOME/.claude/settings.json" ]; then
-    _key=\$(grep -o '"ANTHROPIC_API_KEY"[[:space:]]*:[[:space:]]*"[^"]*"' "\\\$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
-    [ -n "\\\$_key" ] && export ANTHROPIC_API_KEY="\\\$_key"
+if [ -z "$ANTHROPIC_API_KEY" ]; then
+  if [ -f "$HOME/.claude/settings.json" ]; then
+    _key=$(grep -o '"ANTHROPIC_API_KEY"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
+    [ -n "$_key" ] && export ANTHROPIC_API_KEY="$_key"
   fi
 fi
-if [ -z "\\\$ANTHROPIC_BASE_URL" ]; then
-  if [ -f "\\\$HOME/.claude/settings.json" ]; then
-    _url=\$(grep -o '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*"' "\\\$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
-    [ -n "\\\$_url" ] && export ANTHROPIC_BASE_URL="\\\$_url"
+if [ -z "$ANTHROPIC_BASE_URL" ]; then
+  if [ -f "$HOME/.claude/settings.json" ]; then
+    _url=$(grep -o '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
+    [ -n "$_url" ] && export ANTHROPIC_BASE_URL="$_url"
   fi
 fi
-if [ -z "\\\$ANTHROPIC_MODEL" ]; then
-  if [ -f "\\\$HOME/.claude/settings.json" ]; then
-    _model=\$(grep -o '"ANTHROPIC_MODEL"[[:space:]]*:[[:space:]]*"[^"]*"' "\\\$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
-    [ -n "\\\$_model" ] && export ANTHROPIC_MODEL="\\\$_model"
+if [ -z "$ANTHROPIC_MODEL" ]; then
+  if [ -f "$HOME/.claude/settings.json" ]; then
+    _model=$(grep -o '"ANTHROPIC_MODEL"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
+    [ -n "$_model" ] && export ANTHROPIC_MODEL="$_model"
   fi
 fi
-if [ -z "\\\$ANTHROPIC_SMALL_FAST_MODEL" ]; then
-  if [ -f "\\\$HOME/.claude/settings.json" ]; then
-    _sfm=\$(grep -o '"ANTHROPIC_SMALL_FAST_MODEL"[[:space:]]*:[[:space:]]*"[^"]*"' "\\\$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
-    [ -n "\\\$_sfm" ] && export ANTHROPIC_SMALL_FAST_MODEL="\\\$_sfm"
+if [ -z "$ANTHROPIC_SMALL_FAST_MODEL" ]; then
+  if [ -f "$HOME/.claude/settings.json" ]; then
+    _sfm=$(grep -o '"ANTHROPIC_SMALL_FAST_MODEL"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
+    [ -n "$_sfm" ] && export ANTHROPIC_SMALL_FAST_MODEL="$_sfm"
   fi
 fi
 export NODE_TLS_REJECT_UNAUTHORIZED="0"
 
 # If proot rootfs doesn't exist, fall back to direct execution
-if [ ! -d "$PROOT_ROOT/etc" ]; then
-  exec "$BINARY_PATH" "\\$@"
+if [ ! -d "@@PROOT_ROOT@@/etc" ]; then
+  exec "@@BINARY_PATH@@" "$@"
 fi
 
 # Use proot to provide /etc/resolv.conf for DNS resolution
 exec proot \
-  -r "$PROOT_ROOT" \
+  -r "@@PROOT_ROOT@@" \
   -b /dev \
   -b /proc \
   -b /sys \
   -b /bin \
   -b /usr/bin \
   -b /usr/lib \
-  -b "$MUSL_LIB" \
-  -b "$MUSL_LIB/../tmp" \
+  -b "@@MUSL_LIB@@" \
+  -b "@@MUSL_LIB@@/../tmp" \
   -b /tmp \
-  -w "\\$HOME" \
+  -w "$HOME" \
   --link2symlink \
-  "$BINARY_PATH" "\\$@"
+  "@@BINARY_PATH@@" "$@"
 WRAPPER
+
+    # Replace placeholders with actual paths
+    sed -i "s|@@PROOT_ROOT@@|$PROOT_ROOT|g" "$USR_BIN/claude"
+    sed -i "s|@@BINARY_PATH@@|$BINARY_PATH|g" "$USR_BIN/claude"
+    sed -i "s|@@MUSL_LIB@@|$MUSL_LIB|g" "$USR_BIN/claude"
+
     chmod +x "$USR_BIN/claude"
 
     success "Wrapper script created at $USR_BIN/claude"
