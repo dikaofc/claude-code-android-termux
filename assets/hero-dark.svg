@@ -1,0 +1,282 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" fill="none">
+  <defs>
+    <!-- Background gradient -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="500">
+      <stop offset="0%" stop-color="#0a0a0f"/>
+      <stop offset="50%" stop-color="#0d0d14"/>
+      <stop offset="100%" stop-color="#0a0a0f"/>
+    </linearGradient>
+    <!-- Glow effect -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glow-strong" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Phone gradient -->
+    <linearGradient id="phone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#0f0f1a"/>
+    </linearGradient>
+    <!-- Screen gradient -->
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0c1a0c"/>
+      <stop offset="100%" stop-color="#060f06"/>
+    </linearGradient>
+    <!-- Orange accent gradient -->
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff6b35"/>
+      <stop offset="100%" stop-color="#ff8c42"/>
+    </linearGradient>
+    <!-- Data flow gradient -->
+    <linearGradient id="flow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff6b35" stop-opacity="0.6"/>
+      <stop offset="50%" stop-color="#ff8c42" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#ff6b35" stop-opacity="0.1"/>
+    </linearGradient>
+    <!-- Grid pattern -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff" stroke-opacity="0.03" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="500" fill="url(#bg)"/>
+  <rect width="1200" height="500" fill="url(#grid)"/>
+
+  <!-- Ambient glow spots -->
+  <circle cx="600" cy="250" r="200" fill="#ff6b35" opacity="0.03"/>
+  <circle cx="750" cy="200" r="150" fill="#ff8c42" opacity="0.02"/>
+
+  <!-- ===== PHONE (center-right) ===== -->
+  <!-- Phone body -->
+  <g transform="translate(580, 60)">
+    <!-- Phone shadow -->
+    <rect x="25" y="20" width="140" height="310" rx="20" fill="#000" opacity="0.4"/>
+    <!-- Phone frame -->
+    <rect x="20" y="15" width="140" height="310" rx="22" fill="url(#phone)" stroke="#2a2a3e" stroke-width="1.5"/>
+    <!-- Phone screen -->
+    <rect x="28" y="40" width="124" height="260" rx="8" fill="url(#screen)"/>
+
+    <!-- Terminal text on screen -->
+    <text x="42" y="68" fill="#ff6b35" font-family="monospace" font-size="8" opacity="0.9">$</text>
+    <text x="52" y="68" fill="#88cc88" font-family="monospace" font-size="8">claude --version</text>
+    <text x="42" y="82" fill="#cccccc" font-family="monospace" font-size="7" opacity="0.7">2.1.220 (Claude Code)</text>
+    <text x="42" y="95" fill="#ff6b35" font-family="monospace" font-size="7" opacity="0.8">ARM64</text>
+    <text x="75" y="95" fill="#3ddc84" font-family="monospace" font-size="7" opacity="0.8">READY ✅</text>
+    <text x="42" y="112" fill="#88cc88" font-family="monospace" font-size="7" opacity="0.6">$ claude</text>
+    <text x="42" y="125" fill="#ff8c42" font-family="monospace" font-size="6.5" opacity="0.5">╭─ Welcome to Claude Code</text>
+    <text x="42" y="137" fill="#ff8c42" font-family="monospace" font-size="6.5" opacity="0.4">│  I can help with your</text>
+    <text x="42" y="149" fill="#ff8c42" font-family="monospace" font-size="6.5" opacity="0.3">│  codebase and projects.</text>
+
+    <!-- Terminal cursor blink -->
+    <rect x="42" y="156" width="5" height="9" fill="#ff6b35" opacity="0.8">
+      <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1.2s" repeatCount="indefinite"/>
+    </rect>
+
+    <!-- Phone notch -->
+    <rect x="70" y="22" width="40" height="8" rx="4" fill="#1a1a2e" stroke="#2a2a3e" stroke-width="0.5"/>
+
+    <!-- Status bar -->
+    <text x="38" y="35" fill="#666" font-family="monospace" font-size="5">2:34</text>
+    <text x="120" y="35" fill="#3ddc84" font-family="monospace" font-size="5">⚡ 87%</text>
+  </g>
+
+  <!-- ===== ARCHITECTURE FLOW (right side) ===== -->
+  <!-- Vertical data flow lines -->
+  <line x1="800" y1="60" x2="800" y2="440" stroke="#ff6b35" stroke-width="0.5" opacity="0.15"/>
+
+  <!-- Layer nodes -->
+  <g filter="url(#glow)">
+    <!-- ANDROID -->
+    <g transform="translate(770, 55)">
+      <rect width="60" height="22" rx="4" fill="#1a2a1a" stroke="#3ddc84" stroke-width="0.8" opacity="0.8"/>
+      <text x="30" y="15" text-anchor="middle" fill="#3ddc84" font-family="monospace" font-size="8" font-weight="bold">ANDROID</text>
+    </g>
+    <!-- Connector line -->
+    <line x1="800" y1="77" x2="800" y2="95" stroke="#3ddc84" stroke-width="0.5" opacity="0.4"/>
+    <circle cx="800" cy="86" r="2" fill="#3ddc84" opacity="0.6"/>
+
+    <!-- TERMUX -->
+    <g transform="translate(772, 95)">
+      <rect width="56" height="22" rx="4" fill="#1a1a2e" stroke="#6688cc" stroke-width="0.8" opacity="0.8"/>
+      <text x="28" y="15" text-anchor="middle" fill="#6688cc" font-family="monospace" font-size="8" font-weight="bold">TERMUX</text>
+    </g>
+    <line x1="800" y1="117" x2="800" y2="135" stroke="#6688cc" stroke-width="0.5" opacity="0.4"/>
+    <circle cx="800" cy="126" r="2" fill="#6688cc" opacity="0.6"/>
+
+    <!-- ARM64 -->
+    <g transform="translate(770, 135)">
+      <rect width="60" height="22" rx="4" fill="#2a1a1a" stroke="#ff6b35" stroke-width="0.8" opacity="0.8"/>
+      <text x="30" y="15" text-anchor="middle" fill="#ff6b35" font-family="monospace" font-size="8" font-weight="bold">ARM64</text>
+    </g>
+    <line x1="800" y1="157" x2="800" y2="175" stroke="#ff6b35" stroke-width="0.5" opacity="0.4"/>
+    <circle cx="800" cy="166" r="2" fill="#ff6b35" opacity="0.6"/>
+
+    <!-- MUSL -->
+    <g transform="translate(774, 175)">
+      <rect width="52" height="22" rx="4" fill="#1a1a1a" stroke="#cccccc" stroke-width="0.8" opacity="0.8"/>
+      <text x="26" y="15" text-anchor="middle" fill="#cccccc" font-family="monospace" font-size="8" font-weight="bold">MUSL</text>
+    </g>
+    <line x1="800" y1="197" x2="800" y2="215" stroke="#cccccc" stroke-width="0.5" opacity="0.4"/>
+    <circle cx="800" cy="206" r="2" fill="#cccccc" opacity="0.6"/>
+
+    <!-- ELF PATCH -->
+    <g transform="translate(763, 215)">
+      <rect width="74" height="22" rx="4" fill="#2a2a1a" stroke="#ffcc44" stroke-width="0.8" opacity="0.8"/>
+      <text x="37" y="15" text-anchor="middle" fill="#ffcc44" font-family="monospace" font-size="8" font-weight="bold">ELF PATCH</text>
+    </g>
+    <line x1="800" y1="237" x2="800" y2="255" stroke="#ffcc44" stroke-width="0.5" opacity="0.4"/>
+    <circle cx="800" cy="246" r="2" fill="#ffcc44" opacity="0.6"/>
+
+    <!-- PATCHELF -->
+    <g transform="translate(763, 255)">
+      <rect width="74" height="22" rx="4" fill="#1a2a2a" stroke="#55cccc" stroke-width="0.8" opacity="0.8"/>
+      <text x="37" y="15" text-anchor="middle" fill="#55cccc" font-family="monospace" font-size="8" font-weight="bold">PATCHELF</text>
+    </g>
+    <line x1="800" y1="277" x2="800" y2="295" stroke="#55cccc" stroke-width="0.5" opacity="0.4"/>
+    <circle cx="800" cy="286" r="2" fill="#55cccc" opacity="0.6"/>
+
+    <!-- CLAUDE CODE -->
+    <g transform="translate(755, 295)">
+      <rect width="90" height="26" rx="5" fill="#1a1010" stroke="#ff6b35" stroke-width="1.2" opacity="0.9"/>
+      <text x="45" y="17" text-anchor="middle" fill="#ff6b35" font-family="monospace" font-size="9" font-weight="bold">CLAUDE CODE</text>
+    </g>
+    <text x="800" y="335" text-anchor="middle" fill="#3ddc84" font-family="monospace" font-size="7" opacity="0.7">NATIVE CLI ✅</text>
+  </g>
+
+  <!-- ===== ARM64 CHIP (left side) ===== -->
+  <g transform="translate(80, 100)" filter="url(#glow)">
+    <!-- Chip body -->
+    <rect width="100" height="100" rx="8" fill="#1a1a2e" stroke="#ff6b35" stroke-width="1" opacity="0.6"/>
+    <!-- Chip inner -->
+    <rect x="10" y="10" width="80" height="80" rx="4" fill="#0f0f1a" stroke="#2a2a3e" stroke-width="0.5"/>
+    <!-- Chip pins (top) -->
+    <rect x="20" y="-6" width="4" height="10" fill="#ff6b35" opacity="0.4"/>
+    <rect x="32" y="-6" width="4" height="10" fill="#ff6b35" opacity="0.4"/>
+    <rect x="44" y="-6" width="4" height="10" fill="#ff6b35" opacity="0.4"/>
+    <rect x="56" y="-6" width="4" height="10" fill="#ff6b35" opacity="0.4"/>
+    <rect x="68" y="-6" width="4" height="10" fill="#ff6b35" opacity="0.4"/>
+    <!-- Chip pins (bottom) -->
+    <rect x="20" y="96" width="4" height="10" fill="#ff6b35" opacity="0.4"/>
+    <rect x="32" y="96" width="4" height="10" fill="#ff6b35" opacity="0.4"/>
+    <rect x="44" y="96" width="4" height="10" fill="#ff6b35" opacity="0.4"/>
+    <rect x="56" y="96" width="4" height="10" fill="#ff6b35" opacity="0.4"/>
+    <rect x="68" y="96" width="4" height="10" fill="#ff6b35" opacity="0.4"/>
+    <!-- Chip pins (left) -->
+    <rect x="-6" y="20" width="10" height="4" fill="#ff6b35" opacity="0.4"/>
+    <rect x="-6" y="32" width="10" height="4" fill="#ff6b35" opacity="0.4"/>
+    <rect x="-6" y="44" width="10" height="4" fill="#ff6b35" opacity="0.4"/>
+    <rect x="-6" y="56" width="10" height="4" fill="#ff6b35" opacity="0.4"/>
+    <rect x="-6" y="68" width="10" height="4" fill="#ff6b35" opacity="0.4"/>
+    <!-- Chip pins (right) -->
+    <rect x="96" y="20" width="10" height="4" fill="#ff6b35" opacity="0.4"/>
+    <rect x="96" y="32" width="10" height="4" fill="#ff6b35" opacity="0.4"/>
+    <rect x="96" y="44" width="10" height="4" fill="#ff6b35" opacity="0.4"/>
+    <rect x="96" y="56" width="10" height="4" fill="#ff6b35" opacity="0.4"/>
+    <rect x="96" y="68" width="10" height="4" fill="#ff6b35" opacity="0.4"/>
+    <!-- Chip label -->
+    <text x="50" y="42" text-anchor="middle" fill="#ff6b35" font-family="monospace" font-size="11" font-weight="bold" opacity="0.9">ARM</text>
+    <text x="50" y="58" text-anchor="middle" fill="#ff8c42" font-family="monospace" font-size="14" font-weight="bold" opacity="0.8">64</text>
+    <text x="50" y="72" text-anchor="middle" fill="#666" font-family="monospace" font-size="5" opacity="0.5">aarch64</text>
+    <!-- Chip glow core -->
+    <circle cx="50" cy="50" r="12" fill="#ff6b35" opacity="0.08">
+      <animate attributeName="r" values="10;14;10" dur="3s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- ===== ELF BINARY BLOCKS (bottom-left) ===== -->
+  <g transform="translate(50, 300)" filter="url(#glow)">
+    <!-- ELF header block -->
+    <rect width="80" height="30" rx="3" fill="#1a1a2e" stroke="#ffcc44" stroke-width="0.6" opacity="0.5"/>
+    <text x="40" y="12" text-anchor="middle" fill="#ffcc44" font-family="monospace" font-size="6" opacity="0.6">ELF HEADER</text>
+    <text x="40" y="22" text-anchor="middle" fill="#888" font-family="monospace" font-size="5" opacity="0.4">INTERP patch</text>
+    <!-- Binary block -->
+    <rect x="0" y="38" width="80" height="24" rx="3" fill="#1a1a1a" stroke="#888" stroke-width="0.5" opacity="0.4"/>
+    <text x="40" y="12" text-anchor="middle" fill="#888" font-family="monospace" font-size="6" opacity="0.5">0x7F 45 4C 46</text>
+    <text x="40" y="52" text-anchor="middle" fill="#666" font-family="monospace" font-size="5" opacity="0.4">265 MB binary</text>
+  </g>
+
+  <!-- ===== DYNAMIC LINKER (bottom-center) ===== -->
+  <g transform="translate(180, 320)" filter="url(#glow)">
+    <rect width="100" height="28" rx="3" fill="#1a2a2a" stroke="#55cccc" stroke-width="0.6" opacity="0.5"/>
+    <text x="50" y="11" text-anchor="middle" fill="#55cccc" font-family="monospace" font-size="6" opacity="0.6">DYNAMIC LINKER</text>
+    <text x="50" y="22" text-anchor="middle" fill="#888" font-family="monospace" font-size="4.5" opacity="0.4">ld-musl-aarch64.so.1</text>
+  </g>
+
+  <!-- ===== SHELL COMMAND CARDS (scattered) ===== -->
+  <g transform="translate(320, 380)" opacity="0.25">
+    <rect width="90" height="16" rx="3" fill="#1a1a2e" stroke="#333" stroke-width="0.5"/>
+    <text x="6" y="11" fill="#88cc88" font-family="monospace" font-size="5">$ pkg install patchelf</text>
+  </g>
+  <g transform="translate(100, 420)" opacity="0.2">
+    <rect width="110" height="16" rx="3" fill="#1a1a2e" stroke="#333" stroke-width="0.5"/>
+    <text x="6" y="11" fill="#88cc88" font-family="monospace" font-size="5">$ patchelf --set-interpreter</text>
+  </g>
+  <g transform="translate(260, 440)" opacity="0.15">
+    <rect width="80" height="16" rx="3" fill="#1a1a2e" stroke="#333" stroke-width="0.5"/>
+    <text x="6" y="11" fill="#88cc88" font-family="monospace" font-size="5">$ unset LD_PRELOAD</text>
+  </g>
+
+  <!-- ===== AI CORE (center) ===== -->
+  <g transform="translate(480, 180)" filter="url(#glow-strong)">
+    <!-- Core outer ring -->
+    <circle cx="40" cy="40" r="38" fill="none" stroke="#ff6b35" stroke-width="0.5" opacity="0.3"/>
+    <circle cx="40" cy="40" r="28" fill="none" stroke="#ff8c42" stroke-width="0.3" opacity="0.2"/>
+    <!-- Core glow -->
+    <circle cx="40" cy="40" r="20" fill="#ff6b35" opacity="0.06">
+      <animate attributeName="r" values="18;22;18" dur="4s" repeatCount="indefinite"/>
+    </circle>
+    <!-- Core center -->
+    <circle cx="40" cy="40" r="8" fill="#ff6b35" opacity="0.15"/>
+    <circle cx="40" cy="40" r="4" fill="#ff8c42" opacity="0.3"/>
+    <!-- Rotating ring -->
+    <circle cx="40" cy="40" r="33" fill="none" stroke="#ff6b35" stroke-width="0.8" stroke-dasharray="4 8" opacity="0.3">
+      <animateTransform attributeName="transform" type="rotate" from="0 40 40" to="360 40 40" dur="20s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- Connection lines from AI core to phone -->
+  <line x1="520" y1="210" x2="580" y2="200" stroke="#ff6b35" stroke-width="0.5" opacity="0.2" stroke-dasharray="3 3"/>
+
+  <!-- Connection lines from AI core to architecture -->
+  <line x1="560" y1="210" x2="770" y2="295" stroke="#ff6b35" stroke-width="0.5" opacity="0.15" stroke-dasharray="3 3"/>
+
+  <!-- ===== FILESYSTEM NODES (scattered) ===== -->
+  <g opacity="0.2">
+    <rect x="160" y="160" width="60" height="14" rx="2" fill="#1a1a2e" stroke="#444" stroke-width="0.4"/>
+    <text x="166" y="170" fill="#888" font-family="monospace" font-size="5">/lib/musl*</text>
+    <rect x="160" y="180" width="60" height="14" rx="2" fill="#1a1a2e" stroke="#444" stroke-width="0.4"/>
+    <text x="166" y="190" fill="#888" font-family="monospace" font-size="5">/bin/claude</text>
+    <rect x="160" y="200" width="60" height="14" rx="2" fill="#1a1a2e" stroke="#444" stroke-width="0.4"/>
+    <text x="166" y="210" fill="#888" font-family="monospace" font-size="5">install.cjs</text>
+  </g>
+
+  <!-- ===== HEX FRAGMENTS (scattered) ===== -->
+  <g opacity="0.1" fill="#ff6b35" font-family="monospace" font-size="5">
+    <text x="350" y="120">0x7F454C46</text>
+    <text x="380" y="450">0xDEADBEEF</text>
+    <text x="950" y="400">0xCAFEBABE</text>
+    <text x="100" y="280">FF6B3500</text>
+    <text x="420" y="80">AA640002</text>
+    <text x="900" y="150">4D55534C</text>
+  </g>
+
+  <!-- ===== SUBTLE DEPTH-OF-FIELD GRADIENT ===== -->
+  <rect width="1200" height="500" fill="url(#bg)" opacity="0.15"/>
+
+  <!-- ===== VIGNETTE ===== -->
+  <radialGradient id="vignette" cx="50%" cy="50%" r="60%">
+    <stop offset="0%" stop-color="transparent"/>
+    <stop offset="100%" stop-color="#000000" stop-opacity="0.5"/>
+  </radialGradient>
+  <rect width="1200" height="500" fill="url(#vignette)"/>
+</svg>

@@ -1,40 +1,39 @@
-# Claude Code on Android Termux
+<div align="center">
 
-Automatic installer & patch to run [Claude Code](https://github.com/anthropics/claude-code) on Android via [Termux](https://termux.dev).
+<!-- ===== HERO BANNER ===== -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/dikaofc/claude-code-android-termux/main/assets/hero-dark.svg">
+  <img src="https://raw.githubusercontent.com/dikaofc/claude-code-android-termux/main/assets/hero-dark.svg" alt="Claude Code on Android Termux" width="100%">
+</picture>
 
-## The Problem
+<br>
 
-Claude Code does not officially publish an Android binary. When installed on Termux:
+[![License](https://img.shields.io/badge/license-MIT-ff6b35?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
+[![Android](https://img.shields.io/badge/Android-3ddc84?style=for-the-badge&logo=android&logoColor=white)](https://termux.dev)
+[![ARM64](https://img.shields.io/badge/ARM64-ff6b35?style=for-the-badge)](#)
+[![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.220-d97757?style=for-the-badge&logo=anthropic&logoColor=white)](https://github.com/anthropics/claude-code)
+[![Stars](https://img.shields.io/github/stars/dikaofc/claude-code-android-termux?style=for-the-badge&color=ff6b35)](https://github.com/dikaofc/claude-code-android-termux/stargazers)
 
-- `process.platform` returns `"android"` (not `"linux"`)
-- The install script maps this to `linux-arm64-android` — a package that **doesn't exist** in `optionalDependencies`
-- npm also refuses to download the `linux-arm64-musl` package because the OS is `android`, not `linux`
-- Result: you get the error stub instead of the real ~250 MB native binary
+<br>
 
-```
-Error: claude native binary not installed.
-```
+### **`$ claude --version`**
+### **`2.1.220 (Claude Code)` · `ARM64` · `READY` ✅**
 
-## The Solution
-
-This script:
-
-1. Installs Claude Code via npm (`--force` to bypass platform checks)
-2. Downloads the **musl** aarch64 binary (statically-linked libc, works on Android)
-3. Downloads `ld-musl-aarch64.so.1` + `libc.musl-aarch64.so.1` from Alpine Linux
-4. Patches the install/wrapper scripts to map Android → musl
-5. Patches the binary with `patchelf` (interpreter + RPATH)
-6. Verifies everything works
+<br>
 
 ---
 
-## Quick Install (One Command)
+### ⚡ **ONE COMMAND — INSTANT SETUP**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dikaofc/claude-code-android-termux/main/install.sh | bash
 ```
 
-Or clone and run locally:
+> 💀 `npm install` → `patchelf` → `LD_PRELOAD fix` → `verify` — fully automated, zero manual steps
+
+---
+
+### 🛠 **OR CLONE & RUN**
 
 ```bash
 git clone https://github.com/dikaofc/claude-code-android-termux.git
@@ -42,178 +41,217 @@ cd claude-code-android-termux
 bash install.sh
 ```
 
-## Manual Install (Step by Step)
+---
 
-If you prefer to understand each step or the automatic script fails:
+</div>
+
+## 🧠 **What This Does**
+
+> Claude Code is Anthropic's AI coding assistant for your terminal.
+> It officially supports Linux/macOS — **not Android.**
+> This project **bridges that gap** so you can run it natively on your phone.
+
+### The Problem
+
+| What happens | Why |
+|---|---|
+| `process.platform` returns `"android"` | Node.js reports Android, not Linux |
+| npm maps to `linux-arm64-android` | That package **doesn't exist** |
+| npm refuses `linux-arm64-musl` | OS mismatch: `android` ≠ `linux` |
+| You get a 500-byte error stub | Instead of the ~250 MB native binary |
+
+### The Fix (what the script does)
+
+```
+┌─────────────────────────────────────────────────────┐
+│  npm install --force                                │
+│    └─ bypass platform check                         │
+│                                                     │
+│  Patch install.cjs + cli-wrapper.cjs                │
+│    └─ android → linux-arm64-musl                    │
+│                                                     │
+│  Download musl runtime (Alpine Linux aarch64)       │
+│    └─ ld-musl-aarch64.so.1 + libc.musl-aarch64.so.1│
+│                                                     │
+│  Run postinstall → extract native binary            │
+│                                                     │
+│  patchelf --set-interpreter (musl linker path)      │
+│  patchelf --set-rpath (musl libc path)              │
+│                                                     │
+│  Wrapper: unset LD_PRELOAD                          │
+│    └─ strip bionic exec helper for musl compat      │
+│                                                     │
+│  ✅ claude --version → 2.1.220 (Claude Code)        │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📱 **Manual Install (Step by Step)**
+
+<details>
+<summary><b>🔍 Click to expand full manual guide</b></summary>
+
+<br>
 
 ### Prerequisites
 
 ```bash
-# Make sure you have these
 pkg update && pkg upgrade
-pkg install nodejs npm curl git
+pkg install nodejs npm curl git patchelf
 ```
 
-**Node.js ≥ 22.0.0 is required** by Claude Code.
+> **Node.js ≥ 22.0.0** is required by Claude Code.
 
-### Step 1: Install Claude Code
+### Step 1 — Install Claude Code
 
 ```bash
 npm install -g @anthropic-ai/claude-code --force --ignore-scripts
 ```
 
-The `--force` flag is needed because npm sees `os: android` instead of `os: linux`.
-The `--ignore-scripts` flag prevents the postinstall from running (it would fail at this point).
+### Step 2 — Patch platform detection
 
-### Step 2: Patch the platform detection
+Edit **both** files — replace the android mapping with musl:
 
-The install script and CLI wrapper both map `android` → `linux-arm64-android`, but that
-package doesn't exist. We remap to `linux-arm64-musl`.
-
-**File: `$PREFIX/lib/node_modules/@anthropic-ai/claude-code/install.cjs`**
-
-Find this block in `getPlatformKey()`:
+**`$PREFIX/lib/node_modules/@anthropic-ai/claude-code/install.cjs`**
+**`$PREFIX/lib/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs`**
 
 ```javascript
+// BEFORE
 if (platform === 'android') {
     return 'linux-' + cpu + '-android'
 }
-```
 
-Replace with:
-
-```javascript
+// AFTER
 if (platform === 'android') {
     // Android (Termux) has no dedicated binary; use musl build
     return 'linux-' + cpu + '-musl'
 }
 ```
 
-**File: `$PREFIX/lib/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs`**
-
-Same replacement as above.
-
-### Step 3: Install musl runtime libraries
-
-Claude Code's aarch64 binary is dynamically linked against musl libc. Termux uses
-Android's bionic libc, so we need to provide the musl linker + libc manually.
+### Step 3 — Install musl runtime
 
 ```bash
-# Download musl from Alpine Linux
 curl -fSL -o /tmp/musl.apk \
   "https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/musl-1.2.5-r11.apk"
-
-# Extract
 mkdir -p /tmp/musl-extract
 tar xzf /tmp/musl.apk -C /tmp/musl-extract 2>/dev/null
-
-# Copy to Termux lib directory
 cp /tmp/musl-extract/lib/ld-musl-aarch64.so.1  "$PREFIX/lib/"
 cp /tmp/musl-extract/lib/libc.musl-aarch64.so.1 "$PREFIX/lib/"
 chmod 755 "$PREFIX/lib"/ld-musl-aarch64.so.1 "$PREFIX/lib"/libc.musl-aarch64.so.1
-
-# Cleanup
 rm -rf /tmp/musl.apk /tmp/musl-extract
 ```
 
-### Step 4: Run postinstall
+### Step 4 — Run postinstall
 
 ```bash
 cd "$PREFIX/lib/node_modules/@anthropic-ai/claude-code"
 node install.cjs
 ```
 
-This extracts the native binary from the musl package into `bin/claude.exe`.
-
-### Step 5: Patch the binary with patchelf
-
-The binary expects the musl linker at `/lib/ld-musl-aarch64.so.1`, but `/lib` is
-read-only on Android. We use `patchelf` to redirect it to Termux's lib directory.
+### Step 5 — Patch ELF binary
 
 ```bash
-# Install patchelf if needed
-pkg install patchelf
-
 BINARY="$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
-
-# Set interpreter (dynamic linker path)
 patchelf --set-interpreter "$PREFIX/lib/ld-musl-aarch64.so.1" "$BINARY"
-
-# Set RUNPATH so libc.musl-aarch64.so.1 is found
 patchelf --set-rpath "$PREFIX/lib" "$BINARY"
 ```
 
-### Step 6: Verify
+### Step 6 — Fix LD_PRELOAD (bionic compat)
+
+```bash
+cat > "$PREFIX/bin/claude" << 'EOF'
+#!/bin/sh
+unset LD_PRELOAD
+exec "$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe" "$@"
+EOF
+chmod +x "$PREFIX/bin/claude"
+```
+
+### Step 7 — Verify ✅
 
 ```bash
 claude --version
-# Expected output: 2.1.220 (Claude Code)
+# → 2.1.220 (Claude Code)
 ```
+
+</details>
 
 ---
 
-## How It Works
+## 🔧 **How It Works**
 
-### Why musl?
+<details>
+<summary><b>🧬 Why musl?</b></summary>
 
-| C Library | Available on Termux | Works with Claude Code binary |
-|-----------|---------------------|-------------------------------|
-| bionic (Android) | ✅ native | ❌ different ABI |
-| glibc | ❌ not available | ❌ not available |
-| **musl** | ❌ not installed | ✅ **Yes** — binary is compiled against musl |
+<br>
 
-The Claude Code aarch64 binary (`linux-arm64-musl`) is compiled against musl libc.
-Since musl is designed to be lightweight and portable, we can extract the musl dynamic
-linker and libc from Alpine Linux and provide them alongside the binary.
+| C Library | On Termux | Claude Code binary |
+|-----------|-----------|-------------------|
+| **bionic** (Android) | ✅ native | ❌ different ABI |
+| **glibc** | ❌ not available | ❌ not available |
+| **musl** | ❌ needs install | ✅ **binary is compiled against it** |
 
-### Why `patchelf`?
+The `linux-arm64-musl` binary is linked against musl libc. We extract the musl linker + libc from Alpine Linux and place them in Termux's lib directory.
 
-The binary's ELF header says:
+</details>
+
+<details>
+<summary><b>🔩 Why patchelf?</b></summary>
+
+<br>
+
+The binary's ELF header expects:
 
 ```
 INTERP: /lib/ld-musl-aarch64.so.1
 ```
 
-On a normal Linux system, `/lib/ld-musl-aarch64.so.1` exists. On Android/Termux:
+On Android:
+- `/lib` → read-only symlink to `/system/lib`
+- musl linker doesn't exist there
 
-- `/lib` is a read-only symlink to `/system/lib`
-- The musl linker doesn't exist there at all
+`patchelf` rewrites the header so the binary looks for the musl linker at `$PREFIX/lib/ld-musl-aarch64.so.1` instead.
 
-`patchelf` rewrites the ELF header so the binary looks for the musl linker at
-`$PREFIX/lib/ld-musl-aarch64.so.1` instead, where we placed it.
+</details>
 
-### Why `--force` for npm?
+<details>
+<summary><b>🎯 Why unset LD_PRELOAD?</b></summary>
 
-npm checks `process.platform` and `process.arch` against the package's `os` and `cpu`
-fields. Since Claude Code's musl package declares `"os": "linux"` and we're on
-`"os": "android"`, npm refuses to install it. `--force` overrides this check.
+<br>
+
+Termux injects `libtermux-exec-ld-preload.so` (bionic helper) into every process via `LD_PRELOAD`. The musl dynamic linker tries to load it and crashes because it can't resolve bionic symbols:
+
+```
+Error relocating libtermux-exec-ld-preload.so: __register_atfork: symbol not found
+```
+
+The wrapper unsets `LD_PRELOAD` before executing the binary.
+
+</details>
 
 ---
 
-## Updating
-
-When a new version of Claude Code is released, reinstall:
+## 🔄 **Updating**
 
 ```bash
-# Option 1: Re-run this script (handles everything automatically)
+# Re-run installer (idempotent — skips what's already done)
 bash install.sh
 
-# Option 2: Manual update
+# Or manual:
 npm install -g @anthropic-ai/claude-code@latest --force --ignore-scripts
 bash install.sh
 ```
 
-The script is **idempotent** — it detects if things are already patched and skips them.
-
 ---
 
-## Uninstalling
+## 🗑 **Uninstalling**
 
 ```bash
-# Option 1: Use the uninstall script
+# Option 1
 bash uninstall.sh
 
-# Option 2: Manual
+# Option 2
 npm uninstall -g @anthropic-ai/claude-code
 rm -f "$PREFIX/lib/ld-musl-aarch64.so.1"
 rm -f "$PREFIX/lib/libc.musl-aarch64.so.1"
@@ -221,92 +259,123 @@ rm -f "$PREFIX/lib/libc.musl-aarch64.so.1"
 
 ---
 
-## Troubleshooting
+## 🐛 **Troubleshooting**
 
-### `claude: command not found`
+<details>
+<summary><code>Error relocating libtermux-exec-ld-preload.so: __register_atfork: symbol not found</code></summary>
 
-```bash
-# Make sure $PREFIX/bin is in your PATH
-echo 'export PATH="/data/data/com.termux/files/usr/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-### `cannot execute: required file not found`
-
-The musl dynamic linker is missing or at the wrong path.
+LD_PRELOAD conflict — re-run `bash install.sh` or manually create the wrapper:
 
 ```bash
-# Reinstall musl libs
-bash install.sh
-```
-
-### `Error relocating ... libtermux-exec-ld-preload.so: __register_atfork: symbol not found`
-
-Termux injects `libtermux-exec-ld-preload.so` (a bionic helper) into the process environment. The musl dynamic linker can't resolve bionic symbols. The fix is a wrapper script that runs `unset LD_PRELOAD` before launching the binary. The `install.sh` does this automatically. If you're fixing manually:
-
-```bash
-cat > /data/data/com.termux/files/usr/bin/claude << 'EOF'
+cat > "$PREFIX/bin/claude" << 'EOF'
 #!/bin/sh
 unset LD_PRELOAD
-exec /data/data/com.termux/files/usr/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe "$@"
+exec "$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe" "$@"
 EOF
-chmod +x /data/data/com.termux/files/usr/bin/claude
+chmod +x "$PREFIX/bin/claude"
 ```
 
+</details>
 
-### `Error: claude native binary not installed`
+<details>
+<summary><code>Error: claude native binary not installed</code></summary>
 
-The postinstall didn't place the real binary. The `bin/claude.exe` is still the error stub.
+Postinstall didn't extract the binary. Re-run: `bash install.sh`
 
-```bash
-# Re-run the installer
-bash install.sh
-```
+</details>
 
-### `npm ERR! EBADPLATFORM`
+<details>
+<summary><code>cannot execute: required file not found</code></summary>
 
-npm is rejecting the package due to platform mismatch. This is expected — use `--force`.
+Musl dynamic linker missing. Reinstall musl libs: `bash install.sh`
 
-### `patchelf: command not found`
+</details>
+
+<details>
+<summary><code>npm ERR! EBADPLATFORM</code></summary>
+
+Expected on Android. Always use `--force` with npm install.
+
+</details>
+
+<details>
+<summary><code>patchelf: command not found</code></summary>
 
 ```bash
 pkg install patchelf
 ```
 
-### Node.js version too old
+</details>
 
-Claude Code requires Node.js ≥ 22.0.0.
+<details>
+<summary><b>Node.js too old</b></summary>
+
+Claude Code requires Node.js ≥ 22.0.0:
 
 ```bash
 pkg install nodejs
-node -v  # Should show v22.x or higher
+node -v
 ```
 
-### Permission denied
-
-Make sure you're not running as root in a chroot. Termux apps run as a regular user
-in their own namespace.
+</details>
 
 ---
 
-## Tested On
+## 📊 **Tested On**
 
-| Device | Android | Termux | Node.js | Status |
-|--------|---------|--------|---------|--------|
-| aarch64 phone | Android 14 | Latest | v26.4.0 | ✅ Working |
+| Device | Android | Termux | Node.js | Claude Code | Status |
+|--------|---------|--------|---------|-------------|--------|
+| aarch64 phone | 14+ | Latest | v26.x | v2.1.220 | ✅ |
 
-## Limitations
+---
 
-- The binary is **~250 MB** — make sure you have enough storage
-- Some Claude Code features that depend on desktop GUI will not work (expected on headless/termux)
-- When Claude Code publishes an official Android binary, this patch will no longer be needed
+## ⚠️ **Limitations**
 
-## Credits
+- Binary is **~250 MB** — needs storage space
+- Desktop GUI features won't work (expected on Termux)
+- Will be unnecessary when Anthropic ships an official Android binary
 
-- [Claude Code](https://github.com/anthropics/claude-code) by Anthropic
+---
+
+## 🤝 **Credits**
+
+- [Claude Code](https://github.com/anthropics/claude-code) by **Anthropic**
 - [Termux](https://termux.dev) — Android terminal emulator
 - [Alpine Linux](https://alpinelinux.org) — musl libc source
 
-## License
+---
 
-MIT — use freely, no warranty.
+<div align="center">
+
+### 💰 **Support This Project**
+
+If this helped you run Claude Code on your phone, consider buying me a coffee ☕
+
+<a href="https://saweria.co/dikatech">
+  <img src="https://img.shields.io/badge/Donate-Saweria-ff6b35?style=for-the-badge&logo=kofi&logoColor=white" alt="Donate via Saweria">
+</a>
+
+---
+
+### 🌐 **Connect with Developer**
+
+<a href="https://t.me/dikaacode">
+  <img src="https://img.shields.io/badge/Telegram-@dikaacode-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram">
+</a>
+<a href="https://discord.gg/dikaalonely">
+  <img src="https://img.shields.io/badge/Discord-@dikaalonely-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord">
+</a>
+<a href="https://instagram.com/xxcdicka">
+  <img src="https://img.shields.io/badge/Instagram-@xxcdicka-E4405F?style=for-the-badge&logo=instagram&logoColor=white" alt="Instagram">
+</a>
+<a href="https://tiktok.com/@dikasecx">
+  <img src="https://img.shields.io/badge/TikTok-@dikasecx-000000?style=for-the-badge&logo=tiktok&logoColor=white" alt="TikTok">
+</a>
+
+---
+
+**Made with 🔥 by [@dikaacode](https://t.me/dikaacode)**
+
+*Star ⭐ this repo if it helped you!*
+
+</div>
