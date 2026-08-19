@@ -162,12 +162,16 @@ patchelf --set-rpath "$PREFIX/lib" "$BINARY"
 First, create a proot rootfs with a working `/etc/resolv.conf`:
 
 ```bash
-mkdir -p ~/.claude-proot/etc ~/.claude-proot/tmp
+mkdir -p ~/.claude-proot/etc/ssl/certs ~/.claude-proot/tmp
 cat > ~/.claude-proot/etc/resolv.conf << 'EOF'
 nameserver 8.8.8.8
 nameserver 1.1.1.1
 EOF
 chmod 1777 ~/.claude-proot/tmp
+# Download CA certs for SSL
+mkdir -p ~/.claude-proot/etc/ssl/certs
+curl -fsSL -o ~/.claude-proot/etc/ssl/certs/ca-certificates.crt https://curl.se/ca/cacert.pem
+cp ~/.claude-proot/etc/ssl/certs/ca-certificates.crt ~/.claude-proot/usr/local/share/ca-certificates/
 ```
 
 Then create the wrapper:
@@ -364,18 +368,24 @@ The musl binary uses its own DNS resolver that reads `/etc/resolv.conf`, which d
    ```
 
 Or edit the wrapper at `$PREFIX/bin/claude` to add:
+The wrapper uses proot to provide both DNS and CA certificates:
+
+1. **DNS**: Proot provides `/etc/resolv.conf` with Google/Cloudflare nameservers
+2. **SSL**: CA certificates from Mozilla are placed at `/etc/ssl/certs/ca-certificates.crt` inside the proot rootfs
+
+Run `bash install.sh` to set this up automatically.
+
+If fixing manually:
+
 ```bash
-export ANTHROPIC_BASE_URL="https://RESOLVED_IP"
-export NODE_TLS_REJECT_UNAUTHORIZED="0"
+# Download CA certs
+mkdir -p ~/.claude-proot/etc/ssl/certs
+curl -fsSL -o ~/.claude-proot/etc/ssl/certs/ca-certificates.crt https://curl.se/ca/cacert.pem
+
+# Also create resolv.conf
+mkdir -p ~/.claude-proot/etc
+echo 'nameserver 8.8.8.8' > ~/.claude-proot/etc/resolv.conf
 ```
-
-Or simply re-run the installer — it sets up proot with a fake `/etc/resolv.conf` that musl can read:
-
-```bash
-bash install.sh
-```
-
-The wrapper uses proot to intercept filesystem calls, providing musl with a working DNS config at `/etc/resolv.conf` (8.8.8.8, 1.1.1.1).
 
 </details>
 

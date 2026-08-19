@@ -344,10 +344,12 @@ setup_wrapper() {
     local MUSL_LIB="/data/data/com.termux/files/usr/lib"
     local USR_BIN="/data/data/com.termux/files/usr/bin"
 
-    # Ensure proot rootfs exists with resolv.conf
+    # Ensure proot rootfs exists with resolv.conf + CA certs
     local PROOT_ROOT="$HOME/.claude-proot"
-    mkdir -p "$PROOT_ROOT/etc" "$PROOT_ROOT/tmp"
+    mkdir -p "$PROOT_ROOT/etc/ssl/certs" "$PROOT_ROOT/usr/local/share/ca-certificates" "$PROOT_ROOT/etc/pki/tls/certs" "$PROOT_ROOT/usr/local/etc/openssl" "$PROOT_ROOT/tmp"
     chmod 1777 "$PROOT_ROOT/tmp" 2>/dev/null || true
+
+    # DNS resolution
     if [ ! -f "$PROOT_ROOT/etc/resolv.conf" ]; then
         cat > "$PROOT_ROOT/etc/resolv.conf" << 'RESOLV'
 nameserver 8.8.8.8
@@ -356,7 +358,27 @@ nameserver 2606:4700:4700::1111
 RESOLV
         success "Created proot resolv.conf for DNS"
     else
-        success "proot rootfs already exists"
+        success "proot resolv.conf already exists"
+    fi
+
+    # CA certificates (musl's Bun needs these for SSL)
+    if [ ! -f "$PROOT_ROOT/etc/ssl/certs/ca-certificates.crt" ]; then
+        info "Downloading CA certificates..."
+        if curl -fsSL -o /tmp/cacert.pem https://curl.se/ca/cacert.pem 2>/dev/null; then
+            cp /tmp/cacert.pem "$PROOT_ROOT/etc/ssl/certs/ca-certificates.crt"
+            cp /tmp/cacert.pem "$PROOT_ROOT/usr/local/share/ca-certificates/ca-certificates.crt"
+            cp /tmp/cacert.pem "$PROOT_ROOT/etc/pki/tls/certs/ca-bundle.crt"
+            cp /tmp/cacert.pem "$PROOT_ROOT/etc/pki/tls/cert.pem"
+            cp /tmp/cacert.pem "$PROOT_ROOT/usr/local/etc/openssl/cert.pem"
+            cp /tmp/cacert.pem "$PROOT_ROOT/etc/ssl/cert.pem"
+            cp /tmp/cacert.pem "$PROOT_ROOT/etc/ssl/ca-bundle.pem"
+            rm -f /tmp/cacert.pem
+            success "CA certificates installed"
+        else
+            warn "Failed to download CA certificates (SSL may fail)"
+        fi
+    else
+        success "CA certificates already installed"
     fi
 
     # Create wrapper script (this is what `claude` actually runs)
