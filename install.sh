@@ -345,8 +345,9 @@ setup_wrapper() {
     local USR_BIN="/data/data/com.termux/files/usr/bin"
 
     # Ensure proot rootfs exists with resolv.conf
-    local PROOT_ROOT="$HOME/.claude-termux-root"
-    mkdir -p "$PROOT_ROOT/etc"
+    local PROOT_ROOT="$HOME/.claude-proot"
+    mkdir -p "$PROOT_ROOT/etc" "$PROOT_ROOT/tmp"
+    chmod 1777 "$PROOT_ROOT/tmp" 2>/dev/null || true
     if [ ! -f "$PROOT_ROOT/etc/resolv.conf" ]; then
         cat > "$PROOT_ROOT/etc/resolv.conf" << 'RESOLV'
 nameserver 8.8.8.8
@@ -401,11 +402,12 @@ fi
 
 # Use proot to provide /etc/resolv.conf for DNS resolution
 exec proot \
-  -0 -r "$PROOT_ROOT" \
+  -r "$PROOT_ROOT" \
   -b /dev \
   -b /proc \
   -b /sys \
   -b "$MUSL_LIB" \
+  -b "$MUSL_LIB/../tmp" \
   -b /tmp \
   -w "\\$HOME" \
   --link2symlink \

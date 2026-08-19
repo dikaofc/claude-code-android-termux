@@ -162,11 +162,12 @@ patchelf --set-rpath "$PREFIX/lib" "$BINARY"
 First, create a proot rootfs with a working `/etc/resolv.conf`:
 
 ```bash
-mkdir -p ~/.claude-termux-root/etc
-cat > ~/.claude-termux-root/etc/resolv.conf << 'EOF'
+mkdir -p ~/.claude-proot/etc ~/.claude-proot/tmp
+cat > ~/.claude-proot/etc/resolv.conf << 'EOF'
 nameserver 8.8.8.8
 nameserver 1.1.1.1
 EOF
+chmod 1777 ~/.claude-proot/tmp
 ```
 
 Then create the wrapper:
@@ -183,14 +184,14 @@ if [ -z "$ANTHROPIC_API_KEY" ] && [ -f "$HOME/.claude/settings.json" ]; then
 fi
 export NODE_TLS_REJECT_UNAUTHORIZED="0"
 
-PROOT_ROOT="$HOME/.claude-termux-root"
+PROOT_ROOT="$HOME/.claude-proot"
 BINARY="$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
 
 if [ ! -d "$PROOT_ROOT/etc" ]; then
   exec "$BINARY" "$@"
 fi
 
-exec proot -0 root -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b "$PREFIX/lib" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
+exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b "$PREFIX/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
 WRAPPER
 chmod +x "$PREFIX/bin/claude"
 ```
