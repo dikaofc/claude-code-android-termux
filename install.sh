@@ -427,24 +427,27 @@ if [ ! -d "@@PROOT_ROOT@@/etc" ]; then
 fi
 
 # Use proot to provide /etc/resolv.conf for DNS resolution
+# -b without host:guest preserves the original path for binary resolution
+# -b host:guest maps Termux bins to standard Linux paths for shell access
 exec proot \
   -r "@@PROOT_ROOT@@" \
   -b /dev \
   -b /proc \
   -b /sys \
+  -b "@@USR_BIN@@:/bin" \
   -b "@@USR_BIN@@:/usr/bin" \
+  -b "@@MUSL_LIB@@" \
   -b "@@MUSL_LIB@@:/usr/lib" \
   -b "@@MUSL_LIB@@/../tmp" \
   -b /tmp \
   -w "$HOME" \
   --link2symlink \
-  "@@PROOT_BINARY@@" "$@"
+  "@@BINARY_PATH@@" "$@"
 WRAPPER
 
     # Replace placeholders with actual paths
     sed -i "s|@@PROOT_ROOT@@|$PROOT_ROOT|g" "$USR_BIN/claude"
     sed -i "s|@@BINARY_PATH@@|$BINARY_PATH|g" "$USR_BIN/claude"
-    sed -i "s|@@PROOT_BINARY@@|/usr/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe|g" "$USR_BIN/claude"
     sed -i "s|@@MUSL_LIB@@|$MUSL_LIB|g" "$USR_BIN/claude"
     sed -i "s|@@USR_BIN@@|$USR_BIN|g" "$USR_BIN/claude"
 
