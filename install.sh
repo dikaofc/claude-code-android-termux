@@ -438,12 +438,13 @@ exec proot \
   -b /tmp \
   -w "$HOME" \
   --link2symlink \
-  "@@BINARY_PATH@@" "$@"
+  "@@PROOT_BINARY@@" "$@"
 WRAPPER
 
     # Replace placeholders with actual paths
     sed -i "s|@@PROOT_ROOT@@|$PROOT_ROOT|g" "$USR_BIN/claude"
     sed -i "s|@@BINARY_PATH@@|$BINARY_PATH|g" "$USR_BIN/claude"
+    sed -i "s|@@PROOT_BINARY@@|/usr/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe|g" "$USR_BIN/claude"
     sed -i "s|@@MUSL_LIB@@|$MUSL_LIB|g" "$USR_BIN/claude"
     sed -i "s|@@USR_BIN@@|$USR_BIN|g" "$USR_BIN/claude"
 

@@ -198,7 +198,7 @@ if [ ! -d "$PROOT_ROOT/etc" ]; then
   exec "$BINARY" "$@"
 fi
 
-exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b "$PREFIX/bin:/usr/bin" -b "$PREFIX/lib:/usr/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
+exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b "$PREFIX/bin:/usr/bin" -b "$PREFIX/lib:/usr/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink /usr/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe "$@"
 WRAPPER
 chmod +x "$PREFIX/bin/claude"
 ```
@@ -356,7 +356,7 @@ if [ ! -d "$PROOT_ROOT/etc" ]; then
   exec "$BINARY" "$@"
 fi
 
-exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b "$PREFIX/bin:/usr/bin" -b "$PREFIX/lib:/usr/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
+exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b "$PREFIX/bin:/usr/bin" -b "$PREFIX/lib:/usr/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink /usr/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe "$@"
 WRAPPER
 chmod +x "$PREFIX/bin/claude"
 ```
