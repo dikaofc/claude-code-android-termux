@@ -218,7 +218,7 @@ patch_musl_runtime() {
     step "6/7" "Patching musl runtime"
 
     local interpreter
-    interpreter="$(readelf -l "$BINARY_PATH" 2>/dev/null | grep "interpreter" | sed 's/.*: //' | sed 's/].*//')"
+    interpreter="$(readelf -l "$BINARY_PATH" 2>/dev/null | grep "interpreter" | sed 's/.*: //' | sed 's/].*//' || true)"
     if echo "$interpreter" | grep -q "com.termux"; then
         success "Binary already patched → interpreter: $interpreter"
         return 0
@@ -227,14 +227,33 @@ patch_musl_runtime() {
     if [ ! -f "$MUSL_LIB/ld-musl-aarch64.so.1" ]; then
         info "Downloading musl runtime from Alpine Linux..."
 
-        local MUSL_VERSION="3.21.0-r0"
-        local MUSL_URL="https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/musl-${MUSL_VERSION}.apk"
+        # Resolve the current musl package version dynamically instead of
+        # pinning one: Alpine renames apk files per release (e.g. 1.2.5-r11),
+        # and a hardcoded stale name returns 404 on fresh installs.
         local tmpdir
         tmpdir="${TMPDIR:-/data/data/com.termux/files/usr/tmp}"
+        mkdir -p "$tmpdir"
 
-        curl -fsSL -o "$tmpdir/musl.apk" "$MUSL_URL" \
-            || curl -fsSL -o "$tmpdir/musl.apk" "https://uk.alpinelinux.org/alpine/v3.21/main/aarch64/musl-${MUSL_VERSION}.apk" \
-            || error "Failed to download musl runtime"
+        local mirror listed pkg
+        for mirror in "https://dl-cdn.alpinelinux.org" "https://uk.alpinelinux.org"; do
+            listed=$(curl -fsSL --max-time 20 "$mirror/alpine/v3.21/main/aarch64/" 2>/dev/null \
+                | grep -o 'musl-[0-9][^"]*\.apk' | sort -V | tail -1 || true)
+            [ -n "$listed" ] && break
+        done
+        if [ -n "$listed" ]; then
+            pkg="$listed"
+            info "Found musl package: $pkg"
+        else
+            # Last-resort fallback list of known-good versions
+            for pkg in musl-1.2.5-r11.apk musl-1.2.5-r8.apk; do
+                curl -fsSL --max-time 20 -o "$tmpdir/musl.apk" \
+                    "https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/$pkg" 2>/dev/null && break || pkg=""
+            done
+        fi
+
+        curl -fsSL --max-time 60 -o "$tmpdir/musl.apk" \
+            "${mirror:-https://dl-cdn.alpinelinux.org}/alpine/v3.21/main/aarch64/$pkg" \
+            || error "Failed to download musl runtime ($pkg)"
 
         mkdir -p "$tmpdir/musl-extract"
         tar xzf "$tmpdir/musl.apk" -C "$tmpdir/musl-extract" 2>/dev/null \
@@ -242,6 +261,7 @@ patch_musl_runtime() {
 
         cp "$tmpdir/musl-extract/lib/ld-musl-aarch64.so.1" "$MUSL_LIB/"
         cp "$tmpdir/musl-extract/lib/libc.musl-aarch64.so.1" "$MUSL_LIB/"
+        chmod 755 "$MUSL_LIB/ld-musl-aarch64.so.1" "$MUSL_LIB/libc.musl-aarch64.so.1"
         rm -rf "$tmpdir/musl.apk" "$tmpdir/musl-extract"
         success "musl runtime downloaded"
     else
@@ -252,7 +272,7 @@ patch_musl_runtime() {
     patchelf --set-interpreter "$MUSL_LIB/ld-musl-aarch64.so.1" "$BINARY_PATH"
     patchelf --set-rpath "$MUSL_LIB" "$BINARY_PATH"
 
-    interpreter="$(readelf -l "$BINARY_PATH" 2>/dev/null | grep "interpreter" | sed 's/.*: //' | sed 's/].*//')"
+    interpreter="$(readelf -l "$BINARY_PATH" 2>/dev/null | grep "interpreter" | sed 's/.*: //' | sed 's/].*//' || true)"
     if echo "$interpreter" | grep -q "com.termux"; then
         success "Patch verified → interpreter: $interpreter"
     else
