@@ -432,7 +432,7 @@ exec proot \
   -b /dev \
   -b /proc \
   -b /sys \
-
+  -b "@@USR_BIN@@" \
   -b "@@MUSL_LIB@@" \
   -b "@@MUSL_LIB@@/../tmp" \
   -b /tmp \
@@ -445,6 +445,7 @@ WRAPPER
     sed -i "s|@@PROOT_ROOT@@|$PROOT_ROOT|g" "$USR_BIN/claude"
     sed -i "s|@@BINARY_PATH@@|$BINARY_PATH|g" "$USR_BIN/claude"
     sed -i "s|@@MUSL_LIB@@|$MUSL_LIB|g" "$USR_BIN/claude"
+    sed -i "s|@@USR_BIN@@|$USR_BIN|g" "$USR_BIN/claude"
 
     chmod +x "$USR_BIN/claude"
 
