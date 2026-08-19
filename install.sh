@@ -340,6 +340,21 @@ else
 # Strip LD_PRELOAD (Termux bionic exec helper) before running the musl-linked binary.
 # The musl dynamic linker cannot resolve bionic symbols from libtermux-exec-ld-preload.so.
 unset LD_PRELOAD
+
+# Fix DNS: musl reads /etc/resolv.conf which doesn't exist on Android.
+# If ANTHROPIC_BASE_URL has a hostname, resolve it via curl and use the IP.
+if [ -n "$ANTHROPIC_BASE_URL" ]; then
+  _host=$(echo "$ANTHROPIC_BASE_URL" | sed 's|https*://||;s|/.*||')
+  # Check if hostname is already an IP
+  if ! echo "$_host" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+    _ip=$(curl -s --connect-timeout 5 -o /dev/null -w '%{remote_ip}' "$ANTHROPIC_BASE_URL" 2>/dev/null)
+    if [ -n "$_ip" ] && [ "$_ip" != "0.0.0.0" ]; then
+      export ANTHROPIC_BASE_URL="$(echo "$ANTHROPIC_BASE_URL" | sed "s|$_host|$_ip|")"
+      export NODE_TLS_REJECT_UNAUTHORIZED="0"
+    fi
+  fi
+fi
+
 exec /data/data/com.termux/files/usr/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe "$@"
 WRAPPER
   chmod +x "$CLAUDE_BIN"

@@ -319,6 +319,30 @@ node -v
 
 </details>
 
+<details>
+<summary><code>Unable to connect to API</code> or API hangs</summary>
+
+The musl binary uses its own DNS resolver that reads `/etc/resolv.conf`, which doesn't exist on Android (`/etc` is read-only). The install script wrapper automatically resolves hostnames via `curl` and uses the IP. If fixing manually:
+
+1. Resolve the IP: `curl -s -o /dev/null -w '%{remote_ip}' "https://your-proxy.com"`
+2. Update `~/.claude/settings.json` with the IP:
+   ```json
+   {
+     "env": {
+       "ANTHROPIC_BASE_URL": "https://RESOLVED_IP",
+       "NODE_TLS_REJECT_UNAUTHORIZED": "0"
+     }
+   }
+   ```
+
+Or edit the wrapper at `$PREFIX/bin/claude` to add:
+```bash
+export ANTHROPIC_BASE_URL="https://RESOLVED_IP"
+export NODE_TLS_REJECT_UNAUTHORIZED="0"
+```
+
+</details>
+
 ---
 
 ## 📊 **Tested On**
