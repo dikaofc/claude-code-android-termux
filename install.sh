@@ -432,8 +432,8 @@ exec proot \
   -b /dev \
   -b /proc \
   -b /sys \
-  -b "@@USR_BIN@@" \
-  -b "@@MUSL_LIB@@" \
+  -b "@@USR_BIN@@:/usr/bin" \
+  -b "@@MUSL_LIB@@:/usr/lib" \
   -b "@@MUSL_LIB@@/../tmp" \
   -b /tmp \
   -w "$HOME" \
