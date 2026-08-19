@@ -191,14 +191,8 @@ if [ -z "$ANTHROPIC_API_KEY" ] && [ -f "$HOME/.claude/settings.json" ]; then
 fi
 export NODE_TLS_REJECT_UNAUTHORIZED="0"
 
-PROOT_ROOT="$HOME/.claude-proot"
 BINARY="$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
-
-if [ ! -d "$PROOT_ROOT/etc" ]; then
-  exec "$BINARY" "$@"
-fi
-
-exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b /system -b "$PREFIX/bin:/bin" -b "$PREFIX/bin:/usr/bin" -b "$PREFIX/lib" -b "$PREFIX/lib:/usr/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
+exec "$BINARY" "$@"
 WRAPPER
 chmod +x "$PREFIX/bin/claude"
 ```
@@ -349,14 +343,8 @@ if [ -z "$ANTHROPIC_API_KEY" ] && [ -f "$HOME/.claude/settings.json" ]; then
 fi
 export NODE_TLS_REJECT_UNAUTHORIZED="0"
 
-PROOT_ROOT="$HOME/.claude-proot"
 BINARY="$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
-
-if [ ! -d "$PROOT_ROOT/etc" ]; then
-  exec "$BINARY" "$@"
-fi
-
-exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b /system -b "$PREFIX/bin:/bin" -b "$PREFIX/bin:/usr/bin" -b "$PREFIX/lib" -b "$PREFIX/lib:/usr/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
+exec "$BINARY" "$@"
 WRAPPER
 chmod +x "$PREFIX/bin/claude"
 ```

@@ -385,12 +385,12 @@ RESOLV
     fi
 
     # Create wrapper script (this is what `claude` actually runs)
-    # Use a quoted heredoc to avoid escaping issues, then sed-replace placeholders
+    # No proot needed — just unset LD_PRELOAD and run directly.
+    # proot breaks child process execution (ELF loading not intercepted).
     cat > "$USR_BIN/claude" << 'WRAPPER'
 #!/bin/sh
 # Claude Code wrapper for Android Termux
-# Fixes: DNS resolution (musl reads /etc/resolv.conf which doesn't exist on Android)
-#        LD_PRELOAD (bionic exec helper incompatible with musl)
+# Fixes: LD_PRELOAD (bionic exec helper incompatible with musl)
 
 unset LD_PRELOAD
 
@@ -421,36 +421,11 @@ if [ -z "$ANTHROPIC_SMALL_FAST_MODEL" ]; then
 fi
 export NODE_TLS_REJECT_UNAUTHORIZED="0"
 
-# If proot rootfs doesn't exist, fall back to direct execution
-if [ ! -d "@@PROOT_ROOT@@/etc" ]; then
-  exec "@@BINARY_PATH@@" "$@"
-fi
-
-# Use proot to provide /etc/resolv.conf for DNS resolution
-# -b without host:guest preserves the original path for binary resolution
-# -b host:guest maps Termux bins to standard Linux paths for shell access
-exec proot \
-  -r "@@PROOT_ROOT@@" \
-  -b /dev \
-  -b /proc \
-  -b /sys \
-  -b /system \
-  -b "@@USR_BIN@@:/bin" \
-  -b "@@USR_BIN@@:/usr/bin" \
-  -b "@@MUSL_LIB@@" \
-  -b "@@MUSL_LIB@@:/usr/lib" \
-  -b "@@MUSL_LIB@@/../tmp" \
-  -b /tmp \
-  -w "$HOME" \
-  --link2symlink \
-  "@@BINARY_PATH@@" "$@"
+exec "@@BINARY_PATH@@" "$@"
 WRAPPER
 
     # Replace placeholders with actual paths
-    sed -i "s|@@PROOT_ROOT@@|$PROOT_ROOT|g" "$USR_BIN/claude"
     sed -i "s|@@BINARY_PATH@@|$BINARY_PATH|g" "$USR_BIN/claude"
-    sed -i "s|@@MUSL_LIB@@|$MUSL_LIB|g" "$USR_BIN/claude"
-    sed -i "s|@@USR_BIN@@|$USR_BIN|g" "$USR_BIN/claude"
 
     chmod +x "$USR_BIN/claude"
 
