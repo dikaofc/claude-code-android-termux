@@ -378,11 +378,8 @@ set it once and `claude` will just work — no need to export anything.
   },
   "model": "oc/deepseek-v4-flash-free",
   "modelOverrides": {
-    "oc/deepseek-v4-flash-free": {
-      "display_name": "DeepSeek V4 Flash Free",
-      "context_window": 200000,
-      "max_output_tokens": 8192
-    }
+    "oc/deepseek-v4-flash-free": "oc/deepseek-v4-flash-free",
+    "claude-haiku-4-5-20251001": "oc/deepseek-v4-flash-free"
   }
 }
 ```
@@ -399,12 +396,12 @@ set it once and `claude` will just work — no need to export anything.
 | `env.NODE_TLS_REJECT_UNAUTHORIZED` | `"0"` skips TLS cert verification | Needed when the endpoint/gateway uses a non-standard cert |
 | `permissions.allow` / `deny` | Which tools Claude may use | `Bash` is required for the Bash tool |
 | `model` | Default model shown in the UI | Same as `env.ANTHROPIC_MODEL` |
-| `modelOverrides` | Tells Claude Code the model's context window | **Silences the "model not recognized" warning** and keeps auto-compact at the real window |
+| `modelOverrides` | Maps model IDs (string → string) | Identity-maps your custom gateway model so Claude Code stops complaining "unrecognized model". Values are **strings** (the provider ID to send) — **not** an object with `display_name`/`context_window`; the schema rejects objects with "Expected string, but received object". Map any model Claude Code requests internally (e.g. `claude-haiku-4-5-20251001` for subagents/guides) to a model your endpoint actually serves |
 
 > 💡 If you use a different model, set both `ANTHROPIC_MODEL` and
 > `ANTHROPIC_SMALL_FAST_MODEL` to model IDs that **actually exist** on your
-> endpoint, and add the model to `modelOverrides` so Claude Code recognizes
-> its context window.
+> endpoint, and add identity mappings in `modelOverrides` (string → string)
+> for any model ID Claude Code requests but your gateway doesn't serve.
 
 ---
 
