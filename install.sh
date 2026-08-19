@@ -141,11 +141,6 @@ install_dependencies() {
         deps_needed+=("proot")
     fi
 
-    # bintray-ndk - may be needed for patchelf compatibility
-    if ! pkg list-installed 2>/dev/null | grep -q bintray-ndk; then
-        deps_needed+=("bintray-ndk")
-    fi
-
     if [ ${#deps_needed[@]} -gt 0 ]; then
         info "Installing: ${deps_needed[*]}"
         pkg install -y "${deps_needed[@]}"
@@ -428,6 +423,9 @@ exec proot \
   -b /dev \
   -b /proc \
   -b /sys \
+  -b /bin \
+  -b /usr/bin \
+  -b /usr/lib \
   -b "$MUSL_LIB" \
   -b "$MUSL_LIB/../tmp" \
   -b /tmp \

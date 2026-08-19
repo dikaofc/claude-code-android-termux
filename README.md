@@ -195,7 +195,7 @@ if [ ! -d "$PROOT_ROOT/etc" ]; then
   exec "$BINARY" "$@"
 fi
 
-exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b "$PREFIX/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
+exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b /bin -b /usr/bin -b /usr/lib -b "$PREFIX/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
 WRAPPER
 chmod +x "$PREFIX/bin/claude"
 ```
@@ -320,6 +320,40 @@ Postinstall didn't extract the binary. Re-run: `bash install.sh`
 <summary><code>cannot execute: required file not found</code></summary>
 
 Musl dynamic linker missing. Reinstall musl libs: `bash install.sh`
+
+</details>
+
+<details>
+<summary><b>Shell commands not working inside Claude Code sessions</b></summary>
+
+Claude Code can't spawn child processes (e.g. `node -v`, `ls`) because `/bin` and `/usr/bin` aren't mounted inside the proot rootfs.
+
+**Fix:** Re-run `bash install.sh` — it will update the wrapper with the missing bind mounts.
+
+**Or manually:**
+
+```bash
+cat > "$PREFIX/bin/claude" << 'WRAPPER'
+#!/bin/sh
+unset LD_PRELOAD
+
+if [ -z "$ANTHROPIC_API_KEY" ] && [ -f "$HOME/.claude/settings.json" ]; then
+  _key=$(grep -o '"ANTHROPIC_API_KEY"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
+  [ -n "$_key" ] && export ANTHROPIC_API_KEY="$_key"
+fi
+export NODE_TLS_REJECT_UNAUTHORIZED="0"
+
+PROOT_ROOT="$HOME/.claude-proot"
+BINARY="$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+
+if [ ! -d "$PROOT_ROOT/etc" ]; then
+  exec "$BINARY" "$@"
+fi
+
+exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b /bin -b /usr/bin -b /usr/lib -b "$PREFIX/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
+WRAPPER
+chmod +x "$PREFIX/bin/claude"
+```
 
 </details>
 
