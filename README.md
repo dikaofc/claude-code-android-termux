@@ -177,6 +177,9 @@ cp ~/.claude-proot/etc/ssl/certs/ca-certificates.crt ~/.claude-proot/usr/local/s
 Then create the wrapper:
 
 ```bash
+# Remove npm symlink before creating wrapper
+rm -f "$PREFIX/bin/claude"
+
 cat > "$PREFIX/bin/claude" << 'WRAPPER'
 #!/bin/sh
 unset LD_PRELOAD
@@ -333,6 +336,9 @@ Claude Code can't spawn child processes (e.g. `node -v`, `ls`) because `/bin` an
 **Or manually:**
 
 ```bash
+# Remove npm symlink before creating wrapper
+rm -f "$PREFIX/bin/claude"
+
 cat > "$PREFIX/bin/claude" << 'WRAPPER'
 #!/bin/sh
 unset LD_PRELOAD

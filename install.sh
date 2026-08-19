@@ -379,6 +379,11 @@ RESOLV
         success "CA certificates already installed"
     fi
 
+    # Remove npm symlink before creating wrapper script
+    if [ -L "$USR_BIN/claude" ]; then
+        rm -f "$USR_BIN/claude"
+    fi
+
     # Create wrapper script (this is what `claude` actually runs)
     cat > "$USR_BIN/claude" << WRAPPER
 #!/bin/sh
