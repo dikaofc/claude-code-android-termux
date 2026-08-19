@@ -177,6 +177,9 @@ install_claude_code() {
         error "npm install failed"
     fi
 
+    # Re-patch after npm install (it may have overwritten patched files)
+    patch_platform_mapping
+
     # Check for Android platform issue
     if [ ! -f "$CLAUDE_DIR/bin/claude.exe" ] || [ "$(stat -c%s "$CLAUDE_DIR/bin/claude.exe" 2>/dev/null || echo 0)" -lt 10000 ]; then
         warn "Platform mismatch detected - will patch in next step"
@@ -192,27 +195,27 @@ patch_platform_mapping() {
 
     local patched=0
 
-    # Patch install.cjs
+    # Patch install.cjs — replace 'return linux- + cpu + -android' with musl
     if [ -f "$CLAUDE_DIR/install.cjs" ]; then
-        if grep -q "linux-arm64-musl" "$CLAUDE_DIR/install.cjs" 2>/dev/null; then
-            success "install.cjs already patched"
-        else
+        if grep -q "linux-' + cpu + '-android" "$CLAUDE_DIR/install.cjs" 2>/dev/null; then
             info "Patching install.cjs..."
-            sed -i 's/`linux-${arch}-${platform}`/platform === "android" ? `linux-arm64-musl` : `linux-${arch}-${platform}`/g' "$CLAUDE_DIR/install.cjs"
+            sed -i "s/return 'linux-' + cpu + '-android'/return 'linux-' + cpu + '-musl'/g" "$CLAUDE_DIR/install.cjs"
             patched=$((patched + 1))
             success "install.cjs patched"
+        else
+            success "install.cjs already patched"
         fi
     fi
 
-    # Patch cli-wrapper.cjs
+    # Patch cli-wrapper.cjs — same pattern
     if [ -f "$CLAUDE_DIR/cli-wrapper.cjs" ]; then
-        if grep -q "linux-arm64-musl" "$CLAUDE_DIR/cli-wrapper.cjs" 2>/dev/null; then
-            success "cli-wrapper.cjs already patched"
-        else
+        if grep -q "linux-' + cpu + '-android" "$CLAUDE_DIR/cli-wrapper.cjs" 2>/dev/null; then
             info "Patching cli-wrapper.cjs..."
-            sed -i 's/`linux-${arch}-${platform}`/platform === "android" ? `linux-arm64-musl` : `linux-${arch}-${platform}`/g' "$CLAUDE_DIR/cli-wrapper.cjs"
+            sed -i "s/return 'linux-' + cpu + '-android'/return 'linux-' + cpu + '-musl'/g" "$CLAUDE_DIR/cli-wrapper.cjs"
             patched=$((patched + 1))
             success "cli-wrapper.cjs patched"
+        else
+            success "cli-wrapper.cjs already patched"
         fi
     fi
 
