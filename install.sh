@@ -432,9 +432,7 @@ exec proot \
   -b /dev \
   -b /proc \
   -b /sys \
-  -b /bin \
-  -b /usr/bin \
-  -b /usr/lib \
+
   -b "@@MUSL_LIB@@" \
   -b "@@MUSL_LIB@@/../tmp" \
   -b /tmp \

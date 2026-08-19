@@ -198,7 +198,7 @@ if [ ! -d "$PROOT_ROOT/etc" ]; then
   exec "$BINARY" "$@"
 fi
 
-exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b /bin -b /usr/bin -b /usr/lib -b "$PREFIX/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
+exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b "$PREFIX/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
 WRAPPER
 chmod +x "$PREFIX/bin/claude"
 ```
@@ -356,7 +356,7 @@ if [ ! -d "$PROOT_ROOT/etc" ]; then
   exec "$BINARY" "$@"
 fi
 
-exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b /bin -b /usr/bin -b /usr/lib -b "$PREFIX/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
+exec proot -r "$PROOT_ROOT" -b /dev -b /proc -b /sys -b "$PREFIX/lib" -b "$PREFIX/tmp" -b /tmp -w "$HOME" --link2symlink "$BINARY" "$@"
 WRAPPER
 chmod +x "$PREFIX/bin/claude"
 ```
