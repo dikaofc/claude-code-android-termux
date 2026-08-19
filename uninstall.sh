@@ -47,4 +47,12 @@ if [ -f "$CLAUDE_BIN" ] || [ -L "$CLAUDE_BIN" ]; then
   rm -f "$CLAUDE_BIN" && ok "Removed $CLAUDE_BIN"
 fi
 
+# 5. Remove the no-root DNS proxy + any running instance
+DNS_PROXY="${TERMUX_PREFIX}/bin/dnsproxy.py"
+[ -f "$DNS_PROXY" ] && rm -f "$DNS_PROXY" && ok "Removed $DNS_PROXY"
+[ -f "${TERMUX_PREFIX}/tmp/dnsproxy.log" ] && rm -f "${TERMUX_PREFIX}/tmp/dnsproxy.log"
+if pgrep -f 'dnsproxy.py' >/dev/null 2>&1; then
+  pkill -f 'dnsproxy.py' 2>/dev/null && ok "Stopped running DNS proxy"
+fi
+
 printf "\n${GREEN}✓ Claude Code has been uninstalled.${RESET}\n\n"

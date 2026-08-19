@@ -11,13 +11,13 @@
 [![License](https://img.shields.io/badge/license-MIT-ff6b35?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-3ddc84?style=for-the-badge&logo=android&logoColor=white)](https://termux.dev)
 [![ARM64](https://img.shields.io/badge/ARM64-ff6b35?style=for-the-badge)](#)
-[![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.220-d97757?style=for-the-badge&logo=anthropic&logoColor=white)](https://github.com/anthropics/claude-code)
+[![Claude Code](https://img.shields.io/badge/Claude_Code-2.1.236-d97757?style=for-the-badge&logo=anthropic&logoColor=white)](https://github.com/anthropics/claude-code)
 [![Stars](https://img.shields.io/github/stars/dikaofc/claude-code-android-termux?style=for-the-badge&color=ff6b35)](https://github.com/dikaofc/claude-code-android-termux/stargazers)
 
 <br>
 
 ### **`$ claude --version`**
-### **`2.1.220 (Claude Code)` · `ARM64` · `READY` ✅**
+### **`2.1.236 (Claude Code)` · `ARM64` · `READY` ✅**
 
 <br>
 
@@ -26,19 +26,20 @@
 ### ⚡ **ONE COMMAND — INSTANT SETUP**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dikaofc/claude-code-android-termux/main/install.sh | bash
+git clone https://github.com/dikaofc/claude-code-android-termux.git
+cd claude-code-android-termux
+sh install.sh
 ```
 
-> 💀 `npm install` → `patchelf` → `LD_PRELOAD fix` → `verify` — fully automated, zero manual steps
+> `sh install.sh` works — the script auto-re-invokes itself with `bash`.
+> Fully automated: npm install → musl runtime → ELF patch → no-root DNS fix → verify.
 
 ---
 
-### 🛠 **OR CLONE & RUN**
+### 🛠 **OR PIPE IT**
 
 ```bash
-git clone https://github.com/dikaofc/claude-code-android-termux.git
-cd claude-code-android-termux
-bash install.sh
+curl -fsSL https://raw.githubusercontent.com/dikaofc/claude-code-android-termux/main/install.sh | bash
 ```
 
 ---
@@ -49,7 +50,8 @@ bash install.sh
 
 > Claude Code is Anthropic's AI coding assistant for your terminal.
 > It officially supports Linux/macOS — **not Android.**
-> This project **bridges that gap** so you can run it natively on your phone.
+> This project **bridges that gap** so you can run it natively on your phone
+> — **no root, no proot** required.
 
 ### The Problem
 
@@ -58,7 +60,7 @@ bash install.sh
 | `process.platform` returns `"android"` | Node.js reports Android, not Linux |
 | npm maps to `linux-arm64-android` | That package **doesn't exist** |
 | npm refuses `linux-arm64-musl` | OS mismatch: `android` ≠ `linux` |
-| You get a 500-byte error stub | Instead of the ~250 MB native binary |
+| You get a 500-byte error stub | Instead of the ~310 MB native binary |
 
 ### The Fix (what the script does)
 
@@ -70,7 +72,7 @@ bash install.sh
 │  Patch install.cjs + cli-wrapper.cjs                │
 │    └─ android → linux-arm64-musl                    │
 │                                                     │
-│  Download musl runtime (Alpine Linux aarch64)       │
+│  Install musl runtime (Alpine Linux aarch64)        │
 │    └─ ld-musl-aarch64.so.1 + libc.musl-aarch64.so.1│
 │                                                     │
 │  Run postinstall → extract native binary            │
@@ -81,9 +83,51 @@ bash install.sh
 │  Wrapper: unset LD_PRELOAD                          │
 │    └─ strip bionic exec helper for musl compat      │
 │                                                     │
-│  ✅ claude --version → 2.1.220 (Claude Code)        │
+│  dnsproxy.py (no-root DNS fix)                      │
+│    └─ auto-started on 127.0.0.1:8080, HTTPS_PROXY   │
+│                                                     │
+│  ✅ claude --version → 2.1.236 (Claude Code)        │
 └─────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 💥 **The DNS Problem (Why Claude Used to Hang)**
+
+If you previously ran `claude` and it stuck on
+**`API error · Retrying...`** forever, this was why:
+
+- The Claude Code binary is **Bun (musl)**.
+- Bun resolves DNS itself with c-ares, which reads **`/etc/resolv.conf`**.
+- On Android, `/etc` is a read-only symlink to `/system/etc` —
+  **`/etc/resolv.conf` simply does not exist.**
+- With no resolv.conf, DNS queries fall back to `127.0.0.1:53`, which nobody
+  answers → the API host can never be resolved → retry forever.
+
+`curl`, `npm`, and `node` work fine because they use **Android's native
+resolver** (bionic). The musl binary is the only one that's broken.
+
+## 🔧 **The No-Root DNS Fix (dnsproxy.py)**
+
+We don't fight the read-only filesystem. Instead we **sidestep** it:
+
+1. `dnsproxy.py` is a tiny HTTP **CONNECT proxy** (~60 lines, pure `python3`).
+2. The `claude` wrapper auto-starts it on `127.0.0.1:8080` when needed,
+   then exports `HTTPS_PROXY`/`HTTP_PROXY` at it.
+3. The musl binary sends its HTTPS traffic through the proxy.
+4. The proxy resolves hostnames with **Android's own resolver**
+   (`socket.getaddrinfo` → bionic → works perfectly), then tunnels the bytes.
+
+```
+claude.exe (musl)  ──HTTPS_PROXY──▶  127.0.0.1:8080  dnsproxy.py
+  "resolve rx8lx48.abc-tunnel.us"  ──▶  getaddrinfo() (bionic) ✅
+  <──── CONNECT tunnel (raw TLS) ────▶  rx8lx48.abc-tunnel.us:443 ✅
+```
+
+- **No root** — no privileged ports, no `/etc` writes.
+- **No proot** — no chroot, no bind mounts, no child-process crashes.
+- **Universal** — works on any device, rooted or not.
+- The proxy is checked/restarted automatically by the wrapper on every run.
 
 ---
 
@@ -98,10 +142,11 @@ bash install.sh
 
 ```bash
 pkg update && pkg upgrade
-pkg install nodejs npm curl git patchelf
+pkg install nodejs npm curl git patchelf python3
 ```
 
-> **Node.js ≥ 22.0.0** is required by Claude Code.
+> **Node.js ≥ 22.0.0** is required by Claude Code. Python 3 is used only by
+> the DNS proxy (no root needed).
 
 ### Step 1 — Install Claude Code
 
@@ -132,15 +177,17 @@ if (platform === 'android') {
 ### Step 3 — Install musl runtime
 
 ```bash
-curl -fSL -o /tmp/musl.apk \
-  "https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/musl-1.2.5-r11.apk"
-mkdir -p /tmp/musl-extract
-tar xzf /tmp/musl.apk -C /tmp/musl-extract 2>/dev/null
-cp /tmp/musl-extract/lib/ld-musl-aarch64.so.1  "$PREFIX/lib/"
-cp /tmp/musl-extract/lib/libc.musl-aarch64.so.1 "$PREFIX/lib/"
+curl -fSL -o "$PREFIX/tmp/musl.apk" \
+  "https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/musl-1.2.5-r12.apk"
+mkdir -p "$PREFIX/tmp/musl-extract"
+tar xzf "$PREFIX/tmp/musl.apk" -C "$PREFIX/tmp/musl-extract" 2>/dev/null
+cp "$PREFIX/tmp/musl-extract/lib/ld-musl-aarch64.so.1"  "$PREFIX/lib/"
+cp "$PREFIX/tmp/musl-extract/lib/libc.musl-aarch64.so.1" "$PREFIX/lib/"
 chmod 755 "$PREFIX/lib"/ld-musl-aarch64.so.1 "$PREFIX/lib"/libc.musl-aarch64.so.1
-rm -rf /tmp/musl.apk /tmp/musl-extract
+rm -rf "$PREFIX/tmp/musl.apk" "$PREFIX/tmp/musl-extract"
 ```
+
+> Uses `$PREFIX/tmp` (a real writable dir) — Android's `/tmp` is not writable.
 
 ### Step 4 — Run postinstall
 
@@ -157,24 +204,14 @@ patchelf --set-interpreter "$PREFIX/lib/ld-musl-aarch64.so.1" "$BINARY"
 patchelf --set-rpath "$PREFIX/lib" "$BINARY"
 ```
 
-### Step 6 — Fix LD_PRELOAD + DNS (bionic compat)
-
-First, create a proot rootfs with a working `/etc/resolv.conf`:
+### Step 6 — DNS proxy (no-root fix)
 
 ```bash
-mkdir -p ~/.claude-proot/etc/ssl/certs ~/.claude-proot/tmp
-cat > ~/.claude-proot/etc/resolv.conf << 'EOF'
-nameserver 8.8.8.8
-nameserver 1.1.1.1
-EOF
-chmod 1777 ~/.claude-proot/tmp
-# Download CA certs for SSL
-mkdir -p ~/.claude-proot/etc/ssl/certs
-curl -fsSL -o ~/.claude-proot/etc/ssl/certs/ca-certificates.crt https://curl.se/ca/cacert.pem
-cp ~/.claude-proot/etc/ssl/certs/ca-certificates.crt ~/.claude-proot/usr/local/share/ca-certificates/
+cp assets/dnsproxy.py "$PREFIX/bin/dnsproxy.py"
+chmod +x "$PREFIX/bin/dnsproxy.py"
 ```
 
-Then create the wrapper:
+### Step 7 — Create the wrapper
 
 ```bash
 # Remove npm symlink before creating wrapper
@@ -183,25 +220,51 @@ rm -f "$PREFIX/bin/claude"
 cat > "$PREFIX/bin/claude" << 'WRAPPER'
 #!/bin/sh
 unset LD_PRELOAD
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 
 # Read API settings from settings.json if not in env
-if [ -z "$ANTHROPIC_API_KEY" ] && [ -f "$HOME/.claude/settings.json" ]; then
-  _key=$(grep -o '"ANTHROPIC_API_KEY"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
-  [ -n "$_key" ] && export ANTHROPIC_API_KEY="$_key"
+if [ -f "$HOME/.claude/settings.json" ]; then
+  for _v in ANTHROPIC_API_KEY ANTHROPIC_BASE_URL ANTHROPIC_MODEL ANTHROPIC_SMALL_FAST_MODEL; do
+    if [ -z "$(eval echo \$$_v)" ]; then
+      _val=$(grep -o "\"$_v\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
+      [ -n "$_val" ] && export "$_v=$_val"
+    fi
+  done
 fi
 export NODE_TLS_REJECT_UNAUTHORIZED="0"
 
-BINARY="$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
-exec "$BINARY" "$@"
+# Auto-start the no-root DNS proxy, then route the binary through it
+if [ -x "$PREFIX/bin/python3" ] && [ -f "$PREFIX/bin/dnsproxy.py" ]; then
+  _port="${CLAUDE_DNS_PROXY_PORT:-8080}"
+  if ! "$PREFIX/bin/python3" - "$_port" >/dev/null 2>&1 <<'PYEOF'
+import socket, sys
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.settimeout(1)
+try:
+    s.connect(("127.0.0.1", int(sys.argv[1])))
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+PYEOF
+  then
+    setsid "$PREFIX/bin/python3" "$PREFIX/bin/dnsproxy.py" "$_port" \
+      >"$PREFIX/tmp/dnsproxy.log" 2>&1 </dev/null &
+    sleep 1
+  fi
+  export HTTPS_PROXY="http://127.0.0.1:$_port"
+  export HTTP_PROXY="http://127.0.0.1:$_port"
+fi
+
+exec "$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe" "$@"
 WRAPPER
 chmod +x "$PREFIX/bin/claude"
 ```
 
-### Step 7 — Verify ✅
+### Step 8 — Verify ✅
 
 ```bash
 claude --version
-# → 2.1.220 (Claude Code)
+# → 2.1.236 (Claude Code)
 ```
 
 </details>
@@ -221,7 +284,9 @@ claude --version
 | **glibc** | ❌ not available | ❌ not available |
 | **musl** | ❌ needs install | ✅ **binary is compiled against it** |
 
-The `linux-arm64-musl` binary is linked against musl libc. We extract the musl linker + libc from Alpine Linux and place them in Termux's lib directory.
+The `linux-arm64-musl` binary is dynamically linked against musl libc.
+We extract the musl linker + libc from Alpine Linux and place them in
+Termux's lib directory.
 
 </details>
 
@@ -240,7 +305,8 @@ On Android:
 - `/lib` → read-only symlink to `/system/lib`
 - musl linker doesn't exist there
 
-`patchelf` rewrites the header so the binary looks for the musl linker at `$PREFIX/lib/ld-musl-aarch64.so.1` instead.
+`patchelf` rewrites the header so the binary looks for the musl linker at
+`$PREFIX/lib/ld-musl-aarch64.so.1` instead.
 
 </details>
 
@@ -249,7 +315,9 @@ On Android:
 
 <br>
 
-Termux injects `libtermux-exec-ld-preload.so` (bionic helper) into every process via `LD_PRELOAD`. The musl dynamic linker tries to load it and crashes because it can't resolve bionic symbols:
+Termux injects `libtermux-exec-ld-preload.so` (bionic helper) into every
+process via `LD_PRELOAD`. The musl dynamic linker tries to load it and
+crashes because it can't resolve bionic symbols:
 
 ```
 Error relocating libtermux-exec-ld-preload.so: __register_atfork: symbol not found
@@ -259,17 +327,41 @@ The wrapper unsets `LD_PRELOAD` before executing the binary.
 
 </details>
 
+<details>
+<summary><b>🌐 Why a DNS proxy (and not /etc/resolv.conf)?</b></summary>
+
+<br>
+
+The musl binary uses **c-ares** for DNS, which reads `/etc/resolv.conf`.
+On Android that file doesn't exist and `/etc` is read-only, so without a
+fix every API call hangs (`API error · Retrying`).
+
+Options we tested and rejected:
+
+| Approach | Result |
+|---|---|
+| Write `/etc/resolv.conf` | ❌ needs root (`/etc` read-only) |
+| LD_PRELOAD shim to intercept `open()` | ❌ Bun inlines syscalls — not intercepted |
+| `HTTPS_PROXY` pointing at a manual proxy | ❌ nothing listens (no root → can't bind :53) |
+| proot with a fake rootfs | ❌ crashes child processes (SIGSEGV) |
+| **dnsproxy.py CONNECT proxy** | ✅ **no root, no proot — works** |
+
+The wrapper auto-starts `dnsproxy.py` on `127.0.0.1:8080` (configurable via
+`CLAUDE_DNS_PROXY_PORT`), which resolves through Android's native resolver.
+The proxy log lives at `$PREFIX/tmp/dnsproxy.log`.
+
+</details>
+
 ---
 
 ## 🔄 **Updating**
 
 ```bash
 # Re-run installer (idempotent — skips what's already done)
-bash install.sh
+sh install.sh
 
-# Or manual:
-npm install -g @anthropic-ai/claude-code@latest --force --ignore-scripts
-bash install.sh
+# Force-update Claude Code to the latest version:
+sh install.sh --update
 ```
 
 ---
@@ -277,13 +369,14 @@ bash install.sh
 ## 🗑 **Uninstalling**
 
 ```bash
-# Option 1
-bash uninstall.sh
-
-# Option 2
+# Remove the wrapper + DNS proxy, then the package:
+rm -f "$PREFIX/bin/claude"
+rm -f "$PREFIX/bin/dnsproxy.py"
 npm uninstall -g @anthropic-ai/claude-code
 rm -f "$PREFIX/lib/ld-musl-aarch64.so.1"
 rm -f "$PREFIX/lib/libc.musl-aarch64.so.1"
+# Stop any running DNS proxy:
+pkill -f dnsproxy.py
 ```
 
 ---
@@ -293,61 +386,43 @@ rm -f "$PREFIX/lib/libc.musl-aarch64.so.1"
 <details>
 <summary><code>Error relocating libtermux-exec-ld-preload.so: __register_atfork: symbol not found</code></summary>
 
-LD_PRELOAD conflict — re-run `bash install.sh` or manually create the wrapper:
-
-```bash
-cat > "$PREFIX/bin/claude" << 'EOF'
-#!/bin/sh
-unset LD_PRELOAD
-exec "$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe" "$@"
-EOF
-chmod +x "$PREFIX/bin/claude"
-```
+LD_PRELOAD conflict — re-run `sh install.sh` or manually create the wrapper
+(see Step 7 above).
 
 </details>
 
 <details>
 <summary><code>Error: claude native binary not installed</code></summary>
 
-Postinstall didn't extract the binary. Re-run: `bash install.sh`
+Postinstall didn't extract the binary. Re-run: `sh install.sh`
 
 </details>
 
 <details>
 <summary><code>cannot execute: required file not found</code></summary>
 
-Musl dynamic linker missing. Reinstall musl libs: `bash install.sh`
+Musl dynamic linker missing. Reinstall musl libs: `sh install.sh`
 
 </details>
 
 <details>
-<summary><b>Shell commands not working inside Claude Code sessions</b></summary>
+<summary><code>API error · Retrying</code> forever</summary>
 
-Claude Code can't spawn child processes (e.g. `node -v`, `ls`) because `/bin` and `/usr/bin` aren't mounted inside the proot rootfs.
-
-**Fix:** Re-run `bash install.sh` — it will update the wrapper with the missing bind mounts.
-
-**Or manually:**
+DNS inside the musl binary — the wrapper usually fixes this automatically.
+Check the proxy:
 
 ```bash
-# Remove npm symlink before creating wrapper
-rm -f "$PREFIX/bin/claude"
+# Is dnsproxy running + did it see CONNECT requests?
+tail -3 "$PREFIX/tmp/dnsproxy.log"
+# → "dnsproxy: listening on 127.0.0.1:8080"
+# → "CONNECT your-api-host:443"
 
-cat > "$PREFIX/bin/claude" << 'WRAPPER'
-#!/bin/sh
-unset LD_PRELOAD
-
-if [ -z "$ANTHROPIC_API_KEY" ] && [ -f "$HOME/.claude/settings.json" ]; then
-  _key=$(grep -o '"ANTHROPIC_API_KEY"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
-  [ -n "$_key" ] && export ANTHROPIC_API_KEY="$_key"
-fi
-export NODE_TLS_REJECT_UNAUTHORIZED="0"
-
-BINARY="$PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
-exec "$BINARY" "$@"
-WRAPPER
-chmod +x "$PREFIX/bin/claude"
+# Not running? Start it manually and re-run claude:
+setsid python3 "$PREFIX/bin/dnsproxy.py" 8080 >"$PREFIX/tmp/dnsproxy.log" 2>&1 &
+HTTPS_PROXY=http://127.0.0.1:8080 claude
 ```
+
+If you changed the port: `CLAUDE_DNS_PROXY_PORT=9090 claude`
 
 </details>
 
@@ -379,58 +454,22 @@ node -v
 
 </details>
 
-<details>
-<summary><code>Unable to connect to API</code> or API hangs</summary>
-
-The musl binary uses its own DNS resolver that reads `/etc/resolv.conf`, which doesn't exist on Android (`/etc` is read-only). The install script wrapper automatically resolves hostnames via `curl` and uses the IP. If fixing manually:
-
-1. Resolve the IP: `curl -s -o /dev/null -w '%{remote_ip}' "https://your-proxy.com"`
-2. Update `~/.claude/settings.json` with the IP:
-   ```json
-   {
-     "env": {
-       "ANTHROPIC_BASE_URL": "https://RESOLVED_IP",
-       "NODE_TLS_REJECT_UNAUTHORIZED": "0"
-     }
-   }
-   ```
-
-Or edit the wrapper at `$PREFIX/bin/claude` to add:
-The wrapper uses proot to provide both DNS and CA certificates:
-
-1. **DNS**: Proot provides `/etc/resolv.conf` with Google/Cloudflare nameservers
-2. **SSL**: CA certificates from Mozilla are placed at `/etc/ssl/certs/ca-certificates.crt` inside the proot rootfs
-
-Run `bash install.sh` to set this up automatically.
-
-If fixing manually:
-
-```bash
-# Download CA certs
-mkdir -p ~/.claude-proot/etc/ssl/certs
-curl -fsSL -o ~/.claude-proot/etc/ssl/certs/ca-certificates.crt https://curl.se/ca/cacert.pem
-
-# Also create resolv.conf
-mkdir -p ~/.claude-proot/etc
-echo 'nameserver 8.8.8.8' > ~/.claude-proot/etc/resolv.conf
-```
-
-</details>
-
 ---
 
 ## 📊 **Tested On**
 
 | Device | Android | Termux | Node.js | Claude Code | Status |
 |--------|---------|--------|---------|-------------|--------|
-| aarch64 phone | 14+ | Latest | v26.x | v2.1.220 | ✅ |
+| aarch64 phone (KernelSU) | Android 14+ | Latest | v26.x | v2.1.236 | ✅ no-root |
 
 ---
 
 ## ⚠️ **Limitations**
 
-- Binary is **~250 MB** — needs storage space
+- Binary is **~310 MB** — needs storage space
 - Desktop GUI features won't work (expected on Termux)
+- Your API endpoint may need `NODE_TLS_REJECT_UNAUTHORIZED=0` if it uses a
+  non-standard TLS cert (the wrapper sets this automatically)
 - Will be unnecessary when Anthropic ships an official Android binary
 
 ---

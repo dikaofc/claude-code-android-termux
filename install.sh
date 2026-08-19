@@ -1,173 +1,151 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Claude Code for Android Termux - Installer
+# Claude Code for Android Termux — Installer
 # ============================================================================
-# Repository: https://github.com/dikaofc/claude-code-android-termux
-# License: MIT
+# Repository : https://github.com/dikaofc/claude-code-android-termux
+# License    : MIT
 #
-# This script automates installing Claude Code on Android Termux (ARM64).
-# It handles: npm install, platform patching, musl runtime, ELF patching,
-# DNS resolution (proot), and LD_PRELOAD stripping.
+# What this does:
+#   1. Checks the environment (Android / Termux / ARM64 / Node.js)
+#   2. Installs the dependencies needed to run the musl binary
+#   3. Installs Claude Code itself via npm
+#   4. Patches the platform mapping (android -> musl) in the npm scripts
+#   5. Downloads the real ARM64 musl binary package
+#   6. Patches the ELF to use the Termux-installed musl loader
+#   7. Installs a no-root DNS fix (dnsproxy.py) + the `claude` wrapper
 #
-# Usage:
-#   bash install.sh          # Install Claude Code
-#   bash install.sh --update # Update to latest version
+# DNS fix (why dnsproxy.py?):
+#   The Claude Code binary is Bun/musl. On Android, /etc/resolv.conf does
+#   not exist (read-only /system), so the binary's DNS resolution fails and
+#   Claude shows "API error · Retrying" forever. /etc cannot be written
+#   without root, and proot breaks child-process execution of the musl
+#   binary. Instead of fighting the filesystem, we run a tiny localhost
+#   HTTP CONNECT proxy (dnsproxy.py, pure python3, NO root, NO proot).
+#   The claude wrapper points HTTPS_PROXY at it; the proxy resolves DNS
+#   using Android's *native* resolver (which works fine) and tunnels the
+#   binary's HTTPS traffic. Everything just works.
+#
+# run as:
+#   sh install.sh           # dash -> auto re-execs under bash
+#   bash install.sh         # direct
+#   bash install.sh --update
 # ============================================================================
+
+# ---- dash compatibility: `sh install.sh` must work ------------------------
+if [ -z "${BASH_VERSION:-}" ]; then
+    echo "[INFO] This script requires bash — re-invoking with bash..."
+    exec bash "$0" "$@"
+fi
 
 set -euo pipefail
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
-BOLD='\033[1m'
-NC='\033[0m'
+# ---- colors ---------------------------------------------------------------
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 
-# Script directory (for local install)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Version tracking
-CURRENT_VERSION=""
-LATEST_VERSION=""
-CLAUDE_DIR=""
-BINARY_PATH=""
-WRAPPER_PATH=""
-
-# ============================================================================
-# Utility Functions
-# ============================================================================
-
-info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-success() {
-    echo -e "${GREEN}[✓]${NC} $1"
-}
-
-warn() {
-    echo -e "${YELLOW}[!]${NC} $1"
-}
-
-error() {
-    echo -e "${RED}[✗]${NC} $1"
-    exit 1
-}
-
-step() {
-    echo ""
-    echo -e "${CYAN}${BOLD}━━━ Step $1: $2 ━━━${NC}"
-}
+info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
+success() { echo -e "${GREEN}[✓]${NC} $1"; }
+warn()    { echo -e "${YELLOW}[!]${NC} $1"; }
+error()   { echo -e "${RED}[✗]${NC} $1"; exit 1; }
+step()    { echo ""; echo -e "${CYAN}${BOLD}━━━ Step $1: $2 ━━━${NC}"; }
 
 banner() {
-    echo ""
-    echo -e "${CYAN}${BOLD}"
     cat << 'EOF'
+
     ╔══════════════════════════════════════════════════════╗
     ║         Claude Code · Android Termux Installer       ║
-    ║            Automated ARM64 + musl Setup              ║
+    ║            ARM64 + musl · no-root DNS fix            ║
     ╚══════════════════════════════════════════════════════╝
 EOF
-    echo -e "${NC}"
 }
 
-# ============================================================================
-# Phase 1: Environment Checks
-# ============================================================================
+# ---- global state ---------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+USR_BIN="$PREFIX/bin"
+MUSL_LIB="$PREFIX/lib"
+CLAUDE_DIR="$(npm root -g 2>/dev/null)/@anthropic-ai/claude-code"
+BINARY_PATH="$CLAUDE_DIR/bin/claude.exe"
+WRAPPER_PATH="$USR_BIN/claude"
+DNS_PROXY_SRC="$SCRIPT_DIR/assets/dnsproxy.py"
+DNS_PROXY_DST="$USR_BIN/dnsproxy.py"
+CURRENT_VERSION=""
 
-check_android() {
+# ============================================================================
+# Phase 1 — Environment
+# ============================================================================
+check_environment() {
     step "1/7" "Checking environment"
 
-    # Check Android/Termux
     if [ "$(uname -o 2>/dev/null)" != "Android" ]; then
         error "Not running on Android. This installer is for Termux only."
     fi
     success "Android/Termux detected"
 
-    # Check architecture
     local arch
     arch="$(uname -m)"
-    if [ "$arch" != "aarch64" ] && [ "$arch" != "arm64" ]; then
-        error "ARM64 (aarch64) required. Detected: $arch"
-    fi
-    success "Architecture: $arch"
+    case "$arch" in
+        aarch64|arm64) success "Architecture: $arch" ;;
+        *) error "ARM64 (aarch64) required. Detected: $arch" ;;
+    esac
 
-    # Check Node.js
     if ! command -v node &>/dev/null; then
         warn "Node.js not found. Installing..."
         pkg install -y nodejs
     fi
-
-    local node_version
-    node_version="$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)"
-    if [ -z "$node_version" ] || [ "$node_version" -lt 22 ] 2>/dev/null; then
-        warn "Node.js >= 22 required (current: v$(node -v 2>/dev/null || echo 'not found'))"
-        warn "Updating Node.js..."
+    local node_major
+    node_major="$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)"
+    if [ -z "$node_major" ] || [ "$node_major" -lt 22 ] 2>/dev/null; then
+        warn "Node.js >= 22 required — installing latest..."
         pkg install -y nodejs
     fi
-    success "Node.js: $(node -v)"
-    success "npm: $(npm -v)"
+    success "Node.js: $(node -v) · npm: $(npm -v)"
 
-    # Check for Claude Code
-    CLAUDE_DIR="$(npm root -g 2>/dev/null)/@anthropic-ai/claude-code"
     if [ -d "$CLAUDE_DIR" ]; then
         CURRENT_VERSION="$(node -e "console.log(require('$CLAUDE_DIR/package.json').version)" 2>/dev/null || echo "")"
-        if [ -n "$CURRENT_VERSION" ]; then
-            info "Claude Code v${CURRENT_VERSION} found"
-        fi
+        [ -n "$CURRENT_VERSION" ] && info "Claude Code v$CURRENT_VERSION already present"
     fi
 }
 
+# ============================================================================
+# Phase 2 — Dependencies
+# ============================================================================
 install_dependencies() {
     step "2/7" "Installing dependencies"
 
     local deps_needed=()
+    # curl        — downloading the musl runtime
+    # patchelf    — repointing the ELF interpreter/RPATH
+    # python3     — runtime for dnsproxy.py (the no-root DNS fix)
+    command -v curl     &>/dev/null || deps_needed+=("curl")
+    command -v patchelf &>/dev/null || deps_needed+=("patchelf")
+    command -v python3  &>/dev/null || deps_needed+=("python3")
 
-    # curl - for downloading musl
-    if ! command -v curl &>/dev/null; then
-        deps_needed+=("curl")
-    fi
-
-    # patchelf - for ELF binary patching
-    if ! command -v patchelf &>/dev/null; then
-        deps_needed+=("patchelf")
-    fi
-
-    # proot - for DNS resolution (musl can't read Android's resolv.conf)
-    if ! command -v proot &>/dev/null; then
-        deps_needed+=("proot")
-    fi
-
-    if [ ${#deps_needed[@]} -gt 0 ]; then
-        info "Installing: ${deps_needed[*]}"
+    if [ "${#deps_needed[@]}" -gt 0 ]; then
         pkg install -y "${deps_needed[@]}"
-        success "Dependencies installed"
+        success "Dependencies installed: ${deps_needed[*]}"
     else
         success "All dependencies already installed"
     fi
 }
 
 # ============================================================================
-# Phase 2: Install / Update Claude Code
+# Phase 3 — Install / Update Claude Code
 # ============================================================================
-
 install_claude_code() {
     step "3/7" "Installing Claude Code"
 
-    # Check if already working
     if [ -n "$CURRENT_VERSION" ]; then
-        # Verify the binary actually works
-        if timeout 10 "$BINARY_PATH" --version &>/dev/null 2>&1; then
-            success "Claude Code v${CURRENT_VERSION} is already installed and working"
+        # LD_PRELOAD (Termux exec helper) breaks the musl binary — unset it
+        # before testing, otherwise even a healthy binary looks broken and
+        # the reinstall would clobber it with npm's stub.
+        if timeout 10 env -u LD_PRELOAD "$BINARY_PATH" --version &>/dev/null 2>&1; then
+            success "Claude Code v${CURRENT_VERSION} already installed and working"
             return 0
         fi
-        warn "Claude Code exists but binary not working, reinstalling..."
+        warn "Claude Code present but binary not working — reinstalling..."
     fi
 
-    # Install with --force to bypass platform check
     info "Installing via npm (this may take a minute)..."
     if npm install -g @anthropic-ai/claude-code --force 2>&1 | tail -5; then
         CLAUDE_DIR="$(npm root -g)/@anthropic-ai/claude-code"
@@ -176,371 +154,290 @@ install_claude_code() {
     else
         error "npm install failed"
     fi
-
-    # Re-patch after npm install (it may have overwritten patched files)
-    patch_platform_mapping
-
-    # Check for Android platform issue
-    if [ ! -f "$CLAUDE_DIR/bin/claude.exe" ] || [ "$(stat -c%s "$CLAUDE_DIR/bin/claude.exe" 2>/dev/null || echo 0)" -lt 10000 ]; then
-        warn "Platform mismatch detected - will patch in next step"
-    fi
+    # Platform mapping is patched in Step 4 (npm may overwrite patched files).
 }
 
 # ============================================================================
-# Phase 3: Patch Platform Mapping
+# Phase 4 — Platform mapping (android -> musl)
 # ============================================================================
-
 patch_platform_mapping() {
-    step "4/7" "Patching platform mapping (Android → musl)"
+    step "4/7" "Patching platform mapping (android → musl)"
 
     local patched=0
+    local f
 
-    # Patch install.cjs — replace 'return linux- + cpu + -android' with musl
-    if [ -f "$CLAUDE_DIR/install.cjs" ]; then
-        if grep -q "linux-' + cpu + '-android" "$CLAUDE_DIR/install.cjs" 2>/dev/null; then
-            info "Patching install.cjs..."
-            sed -i "s/return 'linux-' + cpu + '-android'/return 'linux-' + cpu + '-musl'/g" "$CLAUDE_DIR/install.cjs"
+    for f in "$CLAUDE_DIR/install.cjs" "$CLAUDE_DIR/cli-wrapper.cjs"; do
+        [ -f "$f" ] || continue
+        if grep -q "linux-' + cpu + '-android" "$f" 2>/dev/null; then
+            info "Patching $(basename "$f")..."
+            sed -i "s/return 'linux-' + cpu + '-android'/return 'linux-' + cpu + '-musl'/g" "$f"
+            success "$(basename "$f") patched"
             patched=$((patched + 1))
-            success "install.cjs patched"
         else
-            success "install.cjs already patched"
+            success "$(basename "$f") already patched"
         fi
-    fi
+    done
 
-    # Patch cli-wrapper.cjs — same pattern
-    if [ -f "$CLAUDE_DIR/cli-wrapper.cjs" ]; then
-        if grep -q "linux-' + cpu + '-android" "$CLAUDE_DIR/cli-wrapper.cjs" 2>/dev/null; then
-            info "Patching cli-wrapper.cjs..."
-            sed -i "s/return 'linux-' + cpu + '-android'/return 'linux-' + cpu + '-musl'/g" "$CLAUDE_DIR/cli-wrapper.cjs"
-            patched=$((patched + 1))
-            success "cli-wrapper.cjs patched"
-        else
-            success "cli-wrapper.cjs already patched"
-        fi
-    fi
-
-    if [ $patched -eq 0 ]; then
+    if [ "$patched" -eq 0 ]; then
         success "Platform mapping already correct"
     fi
+    return 0
 }
 
 # ============================================================================
-# Phase 4: Install musl Binary
+# Phase 5 — musl binary (the real ARM64 binary from npm)
 # ============================================================================
-
 install_musl_binary() {
     step "5/7" "Installing musl binary"
 
-    BINARY_PATH="$CLAUDE_DIR/bin/claude.exe"
     local bin_size
     bin_size=$(stat -c%s "$BINARY_PATH" 2>/dev/null || echo 0)
 
-    # Check if real binary is already in place (musl binary is ~265MB)
-    if [ "$bin_size" -gt 100000000 ] 2>/dev/null; then
-        # Verify it's actually a musl binary
-        if readelf -d "$BINARY_PATH" 2>/dev/null | grep -q "musl"; then
-            success "musl binary already in place ($(numfmt --to=iec $bin_size))"
-            return 0
-        fi
-    fi
-
-    # Need to install the musl binary
-    info "Downloading musl binary..."
-
-    # Install the musl package with --force (bypasses platform check)
-    if npm install -g @anthropic-ai/claude-code-linux-arm64-musl@"$CURRENT_VERSION" --force 2>&1 | tail -5; then
-        success "musl package downloaded"
-    else
-        error "Failed to download musl binary"
-    fi
-
-    # Run postinstall to copy binary
-    info "Running postinstall..."
-    cd "$CLAUDE_DIR" || error "Cannot access Claude Code directory"
-    node install.cjs 2>&1 | tail -3
-
-    # Verify
-    bin_size=$(stat -c%s "$BINARY_PATH" 2>/dev/null || echo 0)
-    if [ "$bin_size" -lt 100000000 ] 2>/dev/null; then
-        error "Binary installation failed (size: $bin_size bytes)"
-    fi
-    success "Binary installed ($(numfmt --to=iec $bin_size))"
-}
-
-# ============================================================================
-# Phase 5: Download musl Runtime + patchelf
-# ============================================================================
-
-patch_musl_runtime() {
-    step "6/7" "Patching musl runtime"
-
-    BINARY_PATH="$CLAUDE_DIR/bin/claude.exe"
-
-    # Check if already patched
-    local interpreter
-    interpreter="$(readelf -l "$BINARY_PATH" 2>/dev/null | grep "interpreter" | sed 's/.*: //' | sed 's/].*//')"
-    if echo "$interpreter" | grep -q "com.termux"; then
-        success "Binary already patched with Termux paths"
+    if [ "$bin_size" -gt 100000000 ] 2>/dev/null \
+        && readelf -d "$BINARY_PATH" 2>/dev/null | grep -q "musl"; then
+        success "musl binary already in place ($(numfmt --to=iec "$bin_size" 2>/dev/null || echo "$bin_size bytes"))"
         return 0
     fi
 
-    local MUSL_LIB="/data/data/com.termux/files/usr/lib"
+    info "Downloading musl binary via npm (may take a minute)..."
+    npm install -g "@anthropic-ai/claude-code-linux-arm64-musl@$CURRENT_VERSION" --force 2>&1 | tail -5 \
+        || error "Failed to download musl binary package"
 
-    # Download musl from Alpine Linux if not present
+    info "Running postinstall (copies binary into place)..."
+    ( cd "$CLAUDE_DIR" && node install.cjs 2>&1 | tail -3 )
+
+    bin_size=$(stat -c%s "$BINARY_PATH" 2>/dev/null || echo 0)
+    [ "$bin_size" -lt 100000000 ] 2>/dev/null && error "Binary install failed (size: $bin_size bytes)"
+    success "musl binary installed ($(numfmt --to=iec "$bin_size" 2>/dev/null || echo "$bin_size bytes"))"
+}
+
+# ============================================================================
+# Phase 6 — musl runtime + ELF patching
+# ============================================================================
+patch_musl_runtime() {
+    step "6/7" "Patching musl runtime"
+
+    local interpreter
+    interpreter="$(readelf -l "$BINARY_PATH" 2>/dev/null | grep "interpreter" | sed 's/.*: //' | sed 's/].*//')"
+    if echo "$interpreter" | grep -q "com.termux"; then
+        success "Binary already patched → interpreter: $interpreter"
+        return 0
+    fi
+
     if [ ! -f "$MUSL_LIB/ld-musl-aarch64.so.1" ]; then
         info "Downloading musl runtime from Alpine Linux..."
 
         local MUSL_VERSION="3.21.0-r0"
         local MUSL_URL="https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64/musl-${MUSL_VERSION}.apk"
+        local tmpdir
+        tmpdir="${TMPDIR:-/data/data/com.termux/files/usr/tmp}"
 
-        # Download to /tmp (writable on all Termux installs)
-        if ! curl -fsSL -o /tmp/musl.apk "$MUSL_URL" 2>/dev/null; then
-            # Try alternative mirror
-            MUSL_URL="https://uk.alpinelinux.org/alpine/v3.21/main/aarch64/musl-${MUSL_VERSION}.apk"
-            curl -fsSL -o /tmp/musl.apk "$MUSL_URL" 2>/dev/null || error "Failed to download musl runtime"
-        fi
+        curl -fsSL -o "$tmpdir/musl.apk" "$MUSL_URL" \
+            || curl -fsSL -o "$tmpdir/musl.apk" "https://uk.alpinelinux.org/alpine/v3.21/main/aarch64/musl-${MUSL_VERSION}.apk" \
+            || error "Failed to download musl runtime"
 
-        # Extract
-        mkdir -p /tmp/musl-extract
-        tar xzf /tmp/musl.apk -C /tmp/musl-extract 2>/dev/null || tar xf /tmp/musl.apk -C /tmp/musl-extract 2>/dev/null
+        mkdir -p "$tmpdir/musl-extract"
+        tar xzf "$tmpdir/musl.apk" -C "$tmpdir/musl-extract" 2>/dev/null \
+            || tar xf "$tmpdir/musl.apk" -C "$tmpdir/musl-extract" 2>/dev/null
 
-        # Copy libraries
-        cp /tmp/musl-extract/lib/ld-musl-aarch64.so.1 "$MUSL_LIB/"
-        cp /tmp/musl-extract/lib/libc.musl-aarch64.so.1 "$MUSL_LIB/"
-
-        # Cleanup
-        rm -rf /tmp/musl.apk /tmp/musl-extract
-
+        cp "$tmpdir/musl-extract/lib/ld-musl-aarch64.so.1" "$MUSL_LIB/"
+        cp "$tmpdir/musl-extract/lib/libc.musl-aarch64.so.1" "$MUSL_LIB/"
+        rm -rf "$tmpdir/musl.apk" "$tmpdir/musl-extract"
         success "musl runtime downloaded"
     else
         success "musl runtime already present"
     fi
 
-    # Patch binary with patchelf
-    info "Patching binary with patchelf..."
+    info "Patching ELF interpreter/RPATH with patchelf..."
     patchelf --set-interpreter "$MUSL_LIB/ld-musl-aarch64.so.1" "$BINARY_PATH"
     patchelf --set-rpath "$MUSL_LIB" "$BINARY_PATH"
-    success "Binary patched successfully"
 
-    # Verify
     interpreter="$(readelf -l "$BINARY_PATH" 2>/dev/null | grep "interpreter" | sed 's/.*: //' | sed 's/].*//')"
     if echo "$interpreter" | grep -q "com.termux"; then
-        success "Patch verified: interpreter → $interpreter"
+        success "Patch verified → interpreter: $interpreter"
     else
         error "Patch verification failed"
     fi
 }
 
 # ============================================================================
-# Phase 6: Create Wrapper + DNS Fix
+# Phase 7 — dnsproxy (no-root DNS) + `claude` wrapper
 # ============================================================================
-
 setup_wrapper() {
-    step "7/7" "Creating wrapper and DNS fix"
+    step "7/7" "Installing DNS fix + wrapper"
 
-    BINARY_PATH="$CLAUDE_DIR/bin/claude.exe"
-    local MUSL_LIB="/data/data/com.termux/files/usr/lib"
-    local USR_BIN="/data/data/com.termux/files/usr/bin"
-
-    # Ensure proot rootfs exists with resolv.conf + CA certs
-    local PROOT_ROOT="$HOME/.claude-proot"
-    mkdir -p "$PROOT_ROOT/etc/ssl/certs" "$PROOT_ROOT/usr/local/share/ca-certificates" "$PROOT_ROOT/etc/pki/tls/certs" "$PROOT_ROOT/usr/local/etc/openssl" "$PROOT_ROOT/tmp"
-    chmod 1777 "$PROOT_ROOT/tmp" 2>/dev/null || true
-
-    # DNS resolution
-    if [ ! -f "$PROOT_ROOT/etc/resolv.conf" ]; then
-        cat > "$PROOT_ROOT/etc/resolv.conf" << 'RESOLV'
-nameserver 8.8.8.8
-nameserver 1.1.1.1
-nameserver 2606:4700:4700::1111
-RESOLV
-        success "Created proot resolv.conf for DNS"
+    # --- install the no-root DNS proxy ------------------------------------
+    if [ -f "$DNS_PROXY_SRC" ]; then
+        cp "$DNS_PROXY_SRC" "$DNS_PROXY_DST"
+        chmod +x "$DNS_PROXY_DST"
+        success "DNS proxy installed → $DNS_PROXY_DST"
     else
-        success "proot resolv.conf already exists"
+        # Fallback: embed the proxy directly (works even if assets/ is missing)
+        cat > "$DNS_PROXY_DST" << 'PYEOF'
+#!/usr/bin/env python3
+import socket, sys, threading
+HOST, PORT, BUF = "127.0.0.1", 8080, 65536
+def pipe(a, b):
+    try:
+        while True:
+            d = a.recv(BUF)
+            if not d: break
+            b.sendall(d)
+    except OSError: pass
+    finally:
+        try: b.shutdown(socket.SHUT_WR)
+        except OSError: pass
+def handle(c, a):
+    try:
+        c.settimeout(30); req = b""
+        while b"\r\n\r\n" not in req:
+            ch = c.recv(BUF)
+            if not ch: return
+            req += ch
+            if len(req) > 16384: return
+        ln = req.split(b"\r\n", 1)[0].decode("latin-1", "replace").split()
+        if len(ln) < 2 or ln[0].upper() != "CONNECT":
+            c.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n"); return
+        h, _, p = ln[1].rpartition(":"); p = int(p or 443)
+        ip = socket.gethostbyname(h)
+        u = socket.create_connection((ip, p), timeout=15)
+        c.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        c.settimeout(None); u.settimeout(None)
+        t1 = threading.Thread(target=pipe, args=(c, u), daemon=True)
+        t2 = threading.Thread(target=pipe, args=(u, c), daemon=True)
+        t1.start(); t2.start(); t1.join(); t2.join()
+    except Exception: pass
+    finally:
+        try: c.close()
+        except OSError: pass
+srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+srv.bind((HOST, PORT)); srv.listen(64)
+print(f"dnsproxy: listening on {HOST}:{PORT}", flush=True)
+while True:
+    c, a = srv.accept()
+    threading.Thread(target=handle, args=(c, a), daemon=True).start()
+PYEOF
+        chmod +x "$DNS_PROXY_DST"
+        warn "assets/dnsproxy.py not found — embedded fallback installed"
     fi
 
-    # CA certificates (musl's Bun needs these for SSL)
-    if [ ! -f "$PROOT_ROOT/etc/ssl/certs/ca-certificates.crt" ]; then
-        info "Downloading CA certificates..."
-        if curl -fsSL -o /tmp/cacert.pem https://curl.se/ca/cacert.pem 2>/dev/null; then
-            cp /tmp/cacert.pem "$PROOT_ROOT/etc/ssl/certs/ca-certificates.crt"
-            cp /tmp/cacert.pem "$PROOT_ROOT/usr/local/share/ca-certificates/ca-certificates.crt"
-            cp /tmp/cacert.pem "$PROOT_ROOT/etc/pki/tls/certs/ca-bundle.crt"
-            cp /tmp/cacert.pem "$PROOT_ROOT/etc/pki/tls/cert.pem"
-            cp /tmp/cacert.pem "$PROOT_ROOT/usr/local/etc/openssl/cert.pem"
-            cp /tmp/cacert.pem "$PROOT_ROOT/etc/ssl/cert.pem"
-            cp /tmp/cacert.pem "$PROOT_ROOT/etc/ssl/ca-bundle.pem"
-            rm -f /tmp/cacert.pem
-            success "CA certificates installed"
-        else
-            warn "Failed to download CA certificates (SSL may fail)"
-        fi
-    else
-        success "CA certificates already installed"
-    fi
+    # --- remove npm's symlink, then install our wrapper --------------------
+    [ -L "$WRAPPER_PATH" ] && rm -f "$WRAPPER_PATH"
 
-    # Remove npm symlink before creating wrapper script
-    if [ -L "$USR_BIN/claude" ]; then
-        rm -f "$USR_BIN/claude"
-    fi
-
-    # Create wrapper script (this is what `claude` actually runs)
-    # No proot needed — just unset LD_PRELOAD and run directly.
-    # proot breaks child process execution (ELF loading not intercepted).
-    cat > "$USR_BIN/claude" << 'WRAPPER'
+    cat > "$WRAPPER_PATH" << 'WRAPPER'
 #!/bin/sh
-# Claude Code wrapper for Android Termux
-# Fixes: LD_PRELOAD (bionic exec helper incompatible with musl)
+# ============================================================================
+# claude — Claude Code wrapper for Android Termux
+#
+# Two fixes:
+#  1. LD_PRELOAD — Termux's bionic exec helper breaks the musl binary
+#     (relocation errors), so we strip it before exec.
+#  2. DNS — the musl (Bun) binary can't read Android's /etc/resolv.conf
+#     (it doesn't exist; /system is read-only) so DNS hangs and Claude
+#     shows "API error · Retrying" forever.  Fix: point HTTPS_PROXY at a
+#     tiny localhost CONNECT proxy (dnsproxy.py) that resolves via
+#     Android's own resolver. No root, no proot.
+# ============================================================================
 
 unset LD_PRELOAD
 
-# Ensure ANTHROPIC env vars are set from settings.json if not in environment
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-  if [ -f "$HOME/.claude/settings.json" ]; then
-    _key=$(grep -o '"ANTHROPIC_API_KEY"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
-    [ -n "$_key" ] && export ANTHROPIC_API_KEY="$_key"
-  fi
-fi
-if [ -z "$ANTHROPIC_BASE_URL" ]; then
-  if [ -f "$HOME/.claude/settings.json" ]; then
-    _url=$(grep -o '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
-    [ -n "$_url" ] && export ANTHROPIC_BASE_URL="$_url"
-  fi
-fi
-if [ -z "$ANTHROPIC_MODEL" ]; then
-  if [ -f "$HOME/.claude/settings.json" ]; then
-    _model=$(grep -o '"ANTHROPIC_MODEL"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
-    [ -n "$_model" ] && export ANTHROPIC_MODEL="$_model"
-  fi
-fi
-if [ -z "$ANTHROPIC_SMALL_FAST_MODEL" ]; then
-  if [ -f "$HOME/.claude/settings.json" ]; then
-    _sfm=$(grep -o '"ANTHROPIC_SMALL_FAST_MODEL"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
-    [ -n "$_sfm" ] && export ANTHROPIC_SMALL_FAST_MODEL="$_sfm"
-  fi
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+PROXY_BIN="$PREFIX/bin/dnsproxy.py"
+CLAUDE_EXE="@@BINARY_PATH@@"
+
+# --- 1. load ANTHROPIC_* from ~/.claude/settings.json if not set ----------
+if [ -f "$HOME/.claude/settings.json" ]; then
+    for _v in ANTHROPIC_API_KEY ANTHROPIC_BASE_URL ANTHROPIC_MODEL ANTHROPIC_SMALL_FAST_MODEL; do
+        if [ -z "$(eval echo \$$_v)" ]; then
+            _val=$(grep -o "\"$_v\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$HOME/.claude/settings.json" 2>/dev/null | head -1 | sed 's/.*: *"//;s/".*//')
+            [ -n "$_val" ] && export "$_v=$_val"
+        fi
+    done
 fi
 export NODE_TLS_REJECT_UNAUTHORIZED="0"
 
-exec "@@BINARY_PATH@@" "$@"
+# --- 2. ensure the DNS proxy is running -----------------------------------
+if [ -x "$PREFIX/bin/python3" ] && [ -f "$PROXY_BIN" ]; then
+    _port="${CLAUDE_DNS_PROXY_PORT:-8080}"
+    if ! "$PREFIX/bin/python3" - "$_port" >/dev/null 2>&1 <<'PYEOF'
+import socket, sys
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.settimeout(1)
+try:
+    s.connect(("127.0.0.1", int(sys.argv[1])))
+    sys.exit(0)   # already answering
+except Exception:
+    sys.exit(1)   # not running -> start it
+finally:
+    s.close()
+PYEOF
+    then
+        setsid "$PREFIX/bin/python3" "$PROXY_BIN" "$_port" >"$PREFIX/tmp/dnsproxy.log" 2>&1 </dev/null &
+        sleep 1
+    fi
+    # Make the binary use the proxy (DNS is resolved by Android itself)
+    export HTTPS_PROXY="http://127.0.0.1:$_port"
+    export HTTP_PROXY="http://127.0.0.1:$_port"
+fi
+
+exec "$CLAUDE_EXE" "$@"
 WRAPPER
 
-    # Replace placeholders with actual paths
-    sed -i "s|@@BINARY_PATH@@|$BINARY_PATH|g" "$USR_BIN/claude"
+    sed -i "s|@@BINARY_PATH@@|$BINARY_PATH|g" "$WRAPPER_PATH"
+    chmod +x "$WRAPPER_PATH"
 
-    chmod +x "$USR_BIN/claude"
-
-    success "Wrapper script created at $USR_BIN/claude"
+    success "Wrapper created → $WRAPPER_PATH"
 }
 
 # ============================================================================
-# Phase 7: Verify
+# Verification
 # ============================================================================
-
 verify_installation() {
     echo ""
     echo -e "${GREEN}${BOLD}━━━ Verifying Installation ━━━${NC}"
 
-    # Check wrapper exists and is executable
-    if [ ! -x "$WRAPPER_PATH" ]; then
-        error "Wrapper script not found or not executable"
-    fi
+    [ -x "$WRAPPER_PATH" ] || error "Wrapper missing at $WRAPPER_PATH"
+    [ "$(stat -c%s "$BINARY_PATH" 2>/dev/null || echo 0)" -lt 100000000 ] \
+        && error "Binary not properly installed"
 
-    # Check binary exists
-    local bin_size
-    bin_size=$(stat -c%s "$BINARY_PATH" 2>/dev/null || echo 0)
-    if [ "$bin_size" -lt 100000000 ] 2>/dev/null; then
-        error "Binary not properly installed"
-    fi
-
-    # Test binary execution
-    info "Testing binary..."
-    local version_output
-    if version_output=$(timeout 30 claude --version 2>&1); then
-        success "Claude Code works! Version: $version_output"
-    else
-        warn "Binary execution test timed out (may need API key)"
-        info "Try: claude --version"
-    fi
-
-    echo ""
-    echo -e "${GREEN}${BOLD}"
-    cat << 'EOF'
-    ╔══════════════════════════════════════════════════════╗
-    ║          ✅  Installation Complete!                  ║
-    ║                                                      ║
-    ║  Run 'claude' to start using Claude Code             ║
-    ║                                                      ║
-    ║  First time? Set your API key:                       ║
-    ║  export ANTHROPIC_API_KEY="sk-ant-..."               ║
-    ║                                                      ║
-    ║  Or configure in ~/.claude/settings.json:            ║
-    ║  {                                                   ║
-    ║    "env": {                                          ║
-    ║      "ANTHROPIC_API_KEY": "sk-ant-...",              ║
-    ║      "ANTHROPIC_BASE_URL": "https://your-proxy/v1"  ║
-    ║    }                                                 ║
-    ║  }                                                   ║
-    ╚══════════════════════════════════════════════════════╝
-EOF
-    echo -e "${NC}"
+    info "Testing binary — this needs network access to your API endpoint..."
+    timeout 40 "$WRAPPER_PATH" --version 2>&1 | head -1
+    info "Full API test happens on first run (run: claude)"
 }
 
 # ============================================================================
-# Update Mode
+# Update mode
 # ============================================================================
-
 update_claude_code() {
     banner
     info "Updating Claude Code..."
-
-    # Uninstall current version
     npm uninstall -g @anthropic-ai/claude-code 2>/dev/null || true
+    npm install -g @anthropic-ai/claude-code --force 2>&1 | tail -3
 
-    # Install latest
-    npm install -g @anthropic-ai/claude-code --force
-
-    # Get new version
     CLAUDE_DIR="$(npm root -g)/@anthropic-ai/claude-code"
-    LATEST_VERSION="$(node -e "console.log(require('$CLAUDE_DIR/package.json').version)" 2>/dev/null || echo "")"
+    CURRENT_VERSION="$(node -e "console.log(require('$CLAUDE_DIR/package.json').version)" 2>/dev/null || echo "")"
     BINARY_PATH="$CLAUDE_DIR/bin/claude.exe"
+    success "Updated to v${CURRENT_VERSION}"
 
-    success "Updated to v${LATEST_VERSION}"
-
-    # Re-apply patches
     patch_platform_mapping
     install_musl_binary
     patch_musl_runtime
     setup_wrapper
-
-    # Verify
-    echo ""
-    if timeout 30 claude --version 2>&1; then
-        success "Claude Code v${LATEST_VERSION} is ready!"
-    else
-        warn "Claude Code updated but may need reconfiguration"
-    fi
+    verify_installation
 }
 
 # ============================================================================
 # Main
 # ============================================================================
-
 main() {
-    # Check for --update flag
-    if [[ "${1:-}" == "--update" ]] || [[ "${1:-}" == "-u" ]]; then
+    if [ "${1:-}" = "--update" ] || [ "${1:-}" = "-u" ]; then
         update_claude_code
         exit 0
     fi
 
     banner
-
-    # Set paths after install
-    CLAUDE_DIR="$(npm root -g)/@anthropic-ai/claude-code"
-    BINARY_PATH="$CLAUDE_DIR/bin/claude.exe"
-    WRAPPER_PATH="/data/data/com.termux/files/usr/bin/claude"
-
-    # Run all phases
-    check_android
+    check_environment
     install_dependencies
     install_claude_code
     patch_platform_mapping
@@ -548,6 +445,14 @@ main() {
     patch_musl_runtime
     setup_wrapper
     verify_installation
+
+    echo ""
+    echo -e "${GREEN}${BOLD}          ✅  Installation Complete!${NC}"
+    echo ""
+    echo "  Run:  claude"
+    echo "  API:  on first run Claude uses ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL"
+    echo "        from ~/.claude/settings.json (or environment variables)."
+    echo ""
 }
 
 main "$@"
