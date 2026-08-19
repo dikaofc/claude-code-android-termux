@@ -434,6 +434,7 @@ exec proot \
   -b /dev \
   -b /proc \
   -b /sys \
+  -b /system \
   -b "@@USR_BIN@@:/bin" \
   -b "@@USR_BIN@@:/usr/bin" \
   -b "@@MUSL_LIB@@" \
