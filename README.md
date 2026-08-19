@@ -240,6 +240,20 @@ The musl dynamic linker is missing or at the wrong path.
 bash install.sh
 ```
 
+### `Error relocating ... libtermux-exec-ld-preload.so: __register_atfork: symbol not found`
+
+Termux injects `libtermux-exec-ld-preload.so` (a bionic helper) into the process environment. The musl dynamic linker can't resolve bionic symbols. The fix is a wrapper script that runs `unset LD_PRELOAD` before launching the binary. The `install.sh` does this automatically. If you're fixing manually:
+
+```bash
+cat > /data/data/com.termux/files/usr/bin/claude << 'EOF'
+#!/bin/sh
+unset LD_PRELOAD
+exec /data/data/com.termux/files/usr/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe "$@"
+EOF
+chmod +x /data/data/com.termux/files/usr/bin/claude
+```
+
+
 ### `Error: claude native binary not installed`
 
 The postinstall didn't place the real binary. The `bin/claude.exe` is still the error stub.

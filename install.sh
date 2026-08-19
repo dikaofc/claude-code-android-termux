@@ -336,8 +336,11 @@ else
   fi
 
   cat > "$CLAUDE_BIN" << 'WRAPPER'
-#!/usr/bin/env bash
-exec "$(dirname "$0")/../lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe" "$@"
+#!/bin/sh
+# Strip LD_PRELOAD (Termux bionic exec helper) before running the musl-linked binary.
+# The musl dynamic linker cannot resolve bionic symbols from libtermux-exec-ld-preload.so.
+unset LD_PRELOAD
+exec /data/data/com.termux/files/usr/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe "$@"
 WRAPPER
   chmod +x "$CLAUDE_BIN"
   ok "Wrapper script created at $CLAUDE_BIN"
