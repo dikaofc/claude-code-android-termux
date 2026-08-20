@@ -405,6 +405,40 @@ set it once and `claude` will just work — no need to export anything.
 
 ---
 
+## 🧩 **Custom Skills**
+
+The installer ships a set of personal skills (Agent Skills standard) that
+Claude Code **auto-loads in any project** — installed to `~/.claude/skills/`
+in **Step 8/8** (re-run `sh install.sh` to (re)install):
+
+| Skill | `#` | What it does |
+|---|---|---|
+| `telegram-bot-dev` | `/telegram-bot-dev` | Advanced JS/Node Telegram bot engineer: grammY/telegraf, inline keyboards, callbacks, webhooks, FSM, payments, debug checklist |
+| `ui-designer` | `/ui-designer` | UI/UX design: tokens, palettes, typography, spacing, dark mode, responsive, WCAG AA, Telegram Mini Apps |
+| `performance-optimizer` | `/performance-optimizer` | Measure-first optimization for JS/Node/DB/shell: baseline → bottleneck → fix → re-measure |
+| `code-reviewer` | `/code-reviewer` | Multi-pass review (correctness → security → reliability → perf → maintainability) with severity-ranked findings |
+| `security-hardener` | `/security-hardener` | Practical hardening for bots/APIs/scripts: secrets, injection, authz, input validation, `npm audit` |
+
+**How they work:**
+
+- **Auto-invoke** — when your message matches a skill's `description`, Claude
+  loads it automatically (e.g. ask "buat bot telegram dengan inline keyboard").
+- **Manual** — type `/telegram-bot-dev` (or any skill name) to invoke it directly.
+- **Same format anywhere** — usable by other Agent-Skills-compatible tools too.
+
+To add your own skill, drop a folder in this repo's `skills/`:
+
+```
+skills/my-skill/SKILL.md
+```
+
+with frontmatter `name:` + `description:` and Markdown instructions — it's
+picked up by the installer on the next run.
+
+`uninstall.sh` removes `~/.claude/skills/` along with everything else.
+
+---
+
 ## 🔄 **Updating**
 
 ```bash

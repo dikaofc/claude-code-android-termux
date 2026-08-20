@@ -69,13 +69,15 @@ BINARY_PATH="$CLAUDE_DIR/bin/claude.exe"
 WRAPPER_PATH="$USR_BIN/claude"
 DNS_PROXY_SRC="$SCRIPT_DIR/assets/dnsproxy.py"
 DNS_PROXY_DST="$USR_BIN/dnsproxy.py"
+SKILLS_SRC="$SCRIPT_DIR/skills"
+SKILLS_DST="${CLAUDE_HOME:-$HOME/.claude}/skills"
 CURRENT_VERSION=""
 
 # ============================================================================
 # Phase 1 — Environment
 # ============================================================================
 check_environment() {
-    step "1/7" "Checking environment"
+    step "1/8" "Checking environment"
 
     if [ "$(uname -o 2>/dev/null)" != "Android" ]; then
         error "Not running on Android. This installer is for Termux only."
@@ -111,7 +113,7 @@ check_environment() {
 # Phase 2 — Dependencies
 # ============================================================================
 install_dependencies() {
-    step "2/7" "Installing dependencies"
+    step "2/8" "Installing dependencies"
 
     local deps_needed=()
     # curl        — downloading the musl runtime
@@ -133,7 +135,7 @@ install_dependencies() {
 # Phase 3 — Install / Update Claude Code
 # ============================================================================
 install_claude_code() {
-    step "3/7" "Installing Claude Code"
+    step "3/8" "Installing Claude Code"
 
     if [ -n "$CURRENT_VERSION" ]; then
         # LD_PRELOAD (Termux exec helper) breaks the musl binary — unset it
@@ -161,7 +163,7 @@ install_claude_code() {
 # Phase 4 — Platform mapping (android -> musl)
 # ============================================================================
 patch_platform_mapping() {
-    step "4/7" "Patching platform mapping (android → musl)"
+    step "4/8" "Patching platform mapping (android → musl)"
 
     local patched=0
     local f
@@ -188,7 +190,7 @@ patch_platform_mapping() {
 # Phase 5 — musl binary (the real ARM64 binary from npm)
 # ============================================================================
 install_musl_binary() {
-    step "5/7" "Installing musl binary"
+    step "5/8" "Installing musl binary"
 
     local bin_size
     bin_size=$(stat -c%s "$BINARY_PATH" 2>/dev/null || echo 0)
@@ -215,7 +217,7 @@ install_musl_binary() {
 # Phase 6 — musl runtime + ELF patching
 # ============================================================================
 patch_musl_runtime() {
-    step "6/7" "Patching musl runtime"
+    step "6/8" "Patching musl runtime"
 
     local interpreter
     interpreter="$(readelf -l "$BINARY_PATH" 2>/dev/null | grep "interpreter" | sed 's/.*: //' | sed 's/].*//' || true)"
@@ -284,7 +286,7 @@ patch_musl_runtime() {
 # Phase 7 — dnsproxy (no-root DNS) + `claude` wrapper
 # ============================================================================
 setup_wrapper() {
-    step "7/7" "Installing DNS fix + wrapper"
+    step "7/8" "Installing DNS fix + wrapper"
 
     # --- install the no-root DNS proxy ------------------------------------
     if [ -f "$DNS_PROXY_SRC" ]; then
@@ -411,6 +413,40 @@ WRAPPER
 }
 
 # ============================================================================
+# Custom skills (Agent Skills standard -> ~/.claude/skills)
+# ============================================================================
+install_skills() {
+    step "8/8" "Installing custom skills"
+
+    if [ ! -d "$SKILLS_SRC" ]; then
+        warn "No skills/ directory found in repo — skipping"
+        return 0
+    fi
+
+    mkdir -p "$SKILLS_DST"
+    local count=0
+    local skill
+    for skill in "$SKILLS_SRC"/*/; do
+        [ -d "$skill" ] || continue
+        name="$(basename "$skill")"
+        if [ -f "$skill/SKILL.md" ]; then
+            cp -r "$skill" "$SKILLS_DST/"
+            success "Skill installed → $SKILLS_DST/$name"
+            count=$((count + 1))
+        else
+            warn "Skipping $name (no SKILL.md)"
+        fi
+    done
+
+    if [ "$count" -eq 0 ]; then
+        warn "No valid skills found"
+    else
+        info "$count skill(s) installed. Claude Code auto-loads them from ~/.claude/skills"
+    fi
+    return 0
+}
+
+# ============================================================================
 # Verification
 # ============================================================================
 verify_installation() {
@@ -444,6 +480,7 @@ update_claude_code() {
     install_musl_binary
     patch_musl_runtime
     setup_wrapper
+    install_skills
     verify_installation
 }
 
@@ -464,6 +501,7 @@ main() {
     install_musl_binary
     patch_musl_runtime
     setup_wrapper
+    install_skills
     verify_installation
 
     echo ""

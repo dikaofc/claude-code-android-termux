@@ -55,4 +55,10 @@ if pgrep -f 'dnsproxy.py' >/dev/null 2>&1; then
   pkill -f 'dnsproxy.py' 2>/dev/null && ok "Stopped running DNS proxy"
 fi
 
+# 6. Remove custom skills installed by the installer
+SKILLS_DST="${CLAUDE_HOME:-$HOME/.claude}/skills"
+if [ -d "$SKILLS_DST" ]; then
+  rm -rf "$SKILLS_DST" && ok "Removed custom skills ($SKILLS_DST)"
+fi
+
 printf "\n${GREEN}✓ Claude Code has been uninstalled.${RESET}\n\n"
