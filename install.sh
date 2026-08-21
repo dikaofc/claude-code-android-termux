@@ -170,10 +170,21 @@ patch_platform_mapping() {
 
     for f in "$CLAUDE_DIR/install.cjs" "$CLAUDE_DIR/cli-wrapper.cjs"; do
         [ -f "$f" ] || continue
-        if grep -q "linux-' + cpu + '-android" "$f" 2>/dev/null; then
-            info "Patching $(basename "$f")..."
-            sed -i "s/return 'linux-' + cpu + '-android'/return 'linux-' + cpu + '-musl'/g" "$f"
-            success "$(basename "$f") patched"
+        # install.cjs hardcodes `return 'linux-' + cpu + '-android'` when
+        # process.platform === 'android'. npm refuses to fetch the musl
+        # optional dep on android (EBADPLATFORM), so we rewrite it to musl.
+        # Use node (not sed/grep) — the string has quotes/symbols that break
+        # shell escaping. Idempotent: only replaces if the android form exists.
+        if node - "$f" <<'NODE' 2>/dev/null; then
+            const fs = require("fs");
+            const p = process.argv[1];
+            let s = fs.readFileSync(p, "utf8");
+            const before = s;
+            s = s.split("return 'linux-' + cpu + '-android'").join("return 'linux-' + cpu + '-musl'");
+            if (s !== before) { fs.writeFileSync(p, s); process.exit(0); }
+            else { process.exit(1); }
+NODE
+            success "$(basename "$f") patched (android → musl)"
             patched=$((patched + 1))
         else
             success "$(basename "$f") already patched"
@@ -202,7 +213,11 @@ install_musl_binary() {
     fi
 
     info "Downloading musl binary via npm (may take a minute)..."
-    npm install -g "@anthropic-ai/claude-code-linux-arm64-musl@$CURRENT_VERSION" --force 2>&1 | tail -5 \
+    # Termux reports os=android, so npm refuses the musl optional dep
+    # (EBADPLATFORM: wanted linux, got android). Override the platform
+    # detection — the musl-arm64 binary is the correct one for Termux.
+    npm install -g "@anthropic-ai/claude-code-linux-arm64-musl@$CURRENT_VERSION" \
+        --force --os=linux --cpu=arm64 --libc=musl 2>&1 | tail -5 \
         || error "Failed to download musl binary package"
 
     info "Running postinstall (copies binary into place)..."
